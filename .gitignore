@@ -1,0 +1,33 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environments
+.venv/
+.uv/
+.env
+.env.*
+.envrc
+
+# Tooling / coverage
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Project artifacts
+data/raw/
+data/parsed/
+data/spotify/
+logs/
+!data/raw/.gitkeep
+!data/parsed/.gitkeep
+!data/spotify/.gitkeep
+!logs/.gitkeep
