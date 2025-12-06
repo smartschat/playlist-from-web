@@ -11,8 +11,8 @@ LLM-assisted CLI that scrapes public webpages, extracts track listings, and crea
 - Install deps: `uv venv && uv sync`.
 
 ## Commands
-- `uv run python -m app dev <url>` — fetch, LLM-parse, write artifacts (`data/raw/`, `data/parsed/`), no Spotify writes.
-- `uv run python -m app import <url>` — full run: parse + Spotify search + playlist creation; add `--no-write` to collect matches/misses without creating playlists.
+- `uv run python -m app dev <url>` — fetch, LLM-parse, write artifacts (`data/raw/`, `data/parsed/`), no Spotify traffic.
+- `uv run python -m app import <url>` — full run: parse + Spotify search + playlist creation; add `--search-only` to collect matches/misses without creating playlists.
 - `uv run python -m app replay <data/parsed/foo.json>` — re-run Spotify mapping from an existing parsed artifact.
 
 Artifacts:

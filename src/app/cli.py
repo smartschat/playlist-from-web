@@ -46,10 +46,10 @@ def import_cmd(
         "--master-playlist/--no-master-playlist",
         help="Override default master playlist creation.",
     ),
-    no_write: bool = typer.Option(
+    search_only: bool = typer.Option(
         False,
-        "--no-write",
-        help="Search and map tracks but do not create playlists (collect misses only).",
+        "--search-only",
+        help="Run Spotify search/mapping but do not create playlists (collect misses only).",
     ),
 ) -> None:
     """
@@ -61,7 +61,7 @@ def import_cmd(
         settings.master_playlist_enabled if master_playlist is None else master_playlist
     )
     typer.echo(
-        f"[import] Processing {url} | master playlist: {master_enabled} | force: {force} | no_write: {no_write}."
+        f"[import] Processing {url} | master playlist: {master_enabled} | force: {force} | search_only: {search_only}."
     )
     try:
         pipeline.run_import(
@@ -69,7 +69,7 @@ def import_cmd(
             force=force,
             master_playlist=master_enabled,
             settings=settings,
-            write_playlists=not no_write,
+            write_playlists=not search_only,
         )
     except Exception as exc:  # noqa: BLE001
         typer.echo(f"Error: {exc}")

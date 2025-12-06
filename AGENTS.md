@@ -8,8 +8,8 @@
 
 ## Build, Test, and Development Commands
 - `uv venv && uv sync` — create and populate the virtualenv from `pyproject.toml`/`uv.lock`.
-- `uv run python -m app dev <url>` — fetch, LLM parse, write artifacts (no Spotify writes).
-- `uv run python -m app import <url>` — full run including Spotify playlist creation; add `--no-write` to search/map without creating playlists (collect misses).
+- `uv run python -m app dev <url>` — fetch, LLM parse, write artifacts (no Spotify access).
+- `uv run python -m app import <url>` — full run including Spotify playlist creation; add `--search-only` to search/map without creating playlists (collect misses).
 - `uv run python -m app replay <parsed.json>` — re-run Spotify mapping without new LLM calls (e.g., from `data/parsed/...json`).
 - `uv run pytest` — execute tests; add `-k`/`-q` for focused runs.
 - `uv run ruff check` / `uv run ruff format` — lint and format; keep clean before opening PRs.
