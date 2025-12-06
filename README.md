@@ -16,7 +16,7 @@ A CLI tool that turns any webpage with music track listings into Spotify playlis
 - Python 3.12 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
 - OpenAI API key
-- Spotify Developer credentials with a refresh token
+- Spotify Developer app (free to create)
 
 ### Installation
 
@@ -28,24 +28,31 @@ uv venv && uv sync
 
 ### Configuration
 
-Copy `.env.example` to `.env` and fill in your credentials:
+**1. Create a `.env` file** with your API keys:
 
 ```bash
 # OpenAI
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini  # or gpt-4o, gpt-5-nano, etc.
 
-# Spotify (requires Authorization Code flow with refresh token)
+# Spotify app credentials (from https://developer.spotify.com/dashboard)
 SPOTIFY_CLIENT_ID=...
 SPOTIFY_CLIENT_SECRET=...
-SPOTIFY_REFRESH_TOKEN=...
-SPOTIFY_USER_ID=...
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
 
 # Optional
 MASTER_PLAYLIST_ENABLED=false  # set to true to also create one combined playlist
 LOG_LEVEL=INFO
 ```
+
+**2. Authenticate with Spotify** by running:
+
+```bash
+uv run python -m app auth
+```
+
+This opens your browser, asks you to log in to Spotify, and automatically saves your refresh token and user ID to `.env`. You only need to do this once.
+
+> **Note**: Make sure `http://localhost:8888/callback` is listed as a redirect URI in your [Spotify app settings](https://developer.spotify.com/dashboard).
 
 ## Usage
 

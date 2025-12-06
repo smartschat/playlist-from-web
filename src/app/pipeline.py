@@ -223,6 +223,7 @@ def run_import(
     settings: Settings,
     write_playlists: bool = True,
 ) -> None:
+    settings.require_spotify_auth()
     parsed, parsed_path = _process_url(url, force, settings)
     with SpotifyClient(
         client_id=settings.spotify_client_id,
@@ -258,6 +259,7 @@ def run_import(
 
 
 def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
+    settings.require_spotify_auth()
     data = json.loads(parsed.read_text(encoding="utf-8"))
     parsed_page = ParsedPage(
         source_url=data["source_url"],
