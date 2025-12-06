@@ -10,7 +10,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-5-nano", alias="OPENAI_MODEL")
 
     spotify_client_id: str = Field(..., alias="SPOTIFY_CLIENT_ID")
     spotify_client_secret: str = Field(..., alias="SPOTIFY_CLIENT_SECRET")

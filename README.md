@@ -5,7 +5,7 @@ LLM-assisted CLI that scrapes public webpages, extracts track listings, and crea
 ## Setup
 - Python 3.12+, [uv](https://github.com/astral-sh/uv) installed.
 - Copy `.env.example` to `.env` and fill:
-  - OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (e.g., `gpt-4o-mini` or your preferred model).
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (e.g., `gpt-5-nano` or your preferred model).
   - Spotify: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REFRESH_TOKEN`, `SPOTIFY_USER_ID`, `SPOTIFY_REDIRECT_URI`.
   - Optional: `MASTER_PLAYLIST_ENABLED=false` to keep per-block only.
 - Install deps: `uv venv && uv sync`.
