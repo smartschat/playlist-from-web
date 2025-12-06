@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .config import Settings
 from .llm import parse_with_llm
@@ -16,7 +17,6 @@ from .spotify_client import (
     select_playlist_name,
 )
 from .utils import ensure_parent, read_text, slugify_url, write_json
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,12 @@ def _clean_text_from_html(html: str) -> str:
     return "\n".join(lines)
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=15),
+    retry=retry_if_exception_type((httpx.ConnectError, httpx.ReadTimeout, httpx.HTTPStatusError)),
+    reraise=True,
+)
 def _fetch_html(url: str) -> str:
     resp = httpx.get(url, timeout=30)
     resp.raise_for_status()
@@ -70,8 +76,10 @@ def _serialize_parsed(parsed: ParsedPage) -> Dict:
     }
 
 
-def _dedupe_tracks(tracks: List[Track]) -> List[Track]:
-    seen = set()
+def _dedupe_tracks(tracks: List[Track], seen: set | None = None) -> Tuple[List[Track], set]:
+    """Deduplicate tracks, optionally using a shared seen set for global deduplication."""
+    if seen is None:
+        seen = set()
     deduped = []
     for t in tracks:
         key = (t.artist.lower().strip(), t.title.lower().strip())
@@ -79,27 +87,40 @@ def _dedupe_tracks(tracks: List[Track]) -> List[Track]:
             continue
         seen.add(key)
         deduped.append(t)
-    return deduped
+    return deduped, seen
+
+
+def _dedupe_blocks_globally(blocks: List[TrackBlock]) -> List[TrackBlock]:
+    """Deduplicate tracks across all blocks globally."""
+    seen: set = set()
+    result = []
+    for block in blocks:
+        deduped_tracks, seen = _dedupe_tracks(block.tracks, seen)
+        if deduped_tracks:
+            result.append(
+                TrackBlock(
+                    title=block.title,
+                    context=block.context,
+                    tracks=deduped_tracks,
+                )
+            )
+    return result
 
 
 def _process_url(url: str, force: bool, settings: Settings) -> Tuple[ParsedPage, Path]:
     slug = slugify_url(url)
     html, raw_path = _load_or_fetch_html(url, slug, force)
     cleaned = _clean_text_from_html(html)
-    parsed = parse_with_llm(url=url, content=cleaned, model=settings.openai_model, api_key=settings.openai_api_key)
-    # dedupe tracks within blocks
+    parsed = parse_with_llm(
+        url=url, content=cleaned, model=settings.openai_model, api_key=settings.openai_api_key
+    )
+    # Global deduplication across all blocks
+    deduped_blocks = _dedupe_blocks_globally(parsed.blocks)
     parsed = ParsedPage(
         source_url=parsed.source_url,
         source_name=parsed.source_name,
         fetched_at=parsed.fetched_at,
-        blocks=[
-            TrackBlock(
-                title=block.title,
-                context=block.context,
-                tracks=_dedupe_tracks(block.tracks),
-            )
-            for block in parsed.blocks
-        ],
+        blocks=deduped_blocks,
     )
     parsed_path = Path("data/parsed") / f"{slug}.json"
     write_json(parsed_path, _serialize_parsed(parsed))
@@ -151,7 +172,7 @@ def _create_playlists(
     mapped_blocks: List[Dict],
     master_playlist: bool,
 ) -> Dict:
-    results = {"playlists": [], "master_playlist": None}
+    results: Dict = {"playlists": [], "master_playlist": None, "failed_tracks": []}
     fetched_date = parsed.fetched_at.date().isoformat()
     master_tracks: List[str] = []
     for block in mapped_blocks:
@@ -163,13 +184,17 @@ def _create_playlists(
         )
         description = select_description(parsed.source_url, block.get("context"))
         playlist = client.create_playlist(name=name, description=description, public=False)
-        client.add_tracks(playlist_id=playlist["id"], uris=uris)
+        added, failed = client.add_tracks(playlist_id=playlist["id"], uris=uris)
+        if failed:
+            results["failed_tracks"].extend(failed)
+            logger.warning("Failed to add %d tracks to playlist %s", len(failed), name)
         results["playlists"].append(
             {
                 "id": playlist["id"],
                 "name": playlist["name"],
                 "url": playlist["external_urls"]["spotify"],
                 "tracks": uris,
+                "tracks_added": added,
             }
         )
         master_tracks.extend(uris)
@@ -178,12 +203,15 @@ def _create_playlists(
         name = f"{parsed.source_name or 'Imported'} – All – {fetched_date}"
         description = select_description(parsed.source_url, "All blocks combined")
         playlist = client.create_playlist(name=name, description=description, public=False)
-        client.add_tracks(playlist_id=playlist["id"], uris=master_tracks)
+        added, failed = client.add_tracks(playlist_id=playlist["id"], uris=master_tracks)
+        if failed:
+            results["failed_tracks"].extend(failed)
         results["master_playlist"] = {
             "id": playlist["id"],
             "name": playlist["name"],
             "url": playlist["external_urls"]["spotify"],
             "tracks": master_tracks,
+            "tracks_added": added,
         }
     return results
 
@@ -196,18 +224,18 @@ def run_import(
     write_playlists: bool = True,
 ) -> None:
     parsed, parsed_path = _process_url(url, force, settings)
-    client = SpotifyClient(
+    with SpotifyClient(
         client_id=settings.spotify_client_id,
         client_secret=settings.spotify_client_secret,
         refresh_token=settings.spotify_refresh_token,
         user_id=settings.spotify_user_id,
-    )
-    mapped_blocks, misses = _map_tracks_to_spotify(client, parsed)
-    creation = (
-        _create_playlists(client, parsed, mapped_blocks, master_playlist)
-        if write_playlists
-        else {"playlists": [], "master_playlist": None}
-    )
+    ) as client:
+        mapped_blocks, misses = _map_tracks_to_spotify(client, parsed)
+        creation = (
+            _create_playlists(client, parsed, mapped_blocks, master_playlist)
+            if write_playlists
+            else {"playlists": [], "master_playlist": None, "failed_tracks": []}
+        )
     slug = slugify_url(url)
     spotify_path = Path("data/spotify") / f"{slug}.json"
     write_json(
@@ -219,12 +247,14 @@ def run_import(
             "playlists": creation["playlists"],
             "master_playlist": creation.get("master_playlist"),
             "misses": misses,
+            "failed_tracks": creation.get("failed_tracks", []),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "write_playlists": write_playlists,
         },
     )
     action = "Mapped (no write)" if not write_playlists else "Created"
-    print(f"{action} {len(creation['playlists'])} playlists. Misses: {len(misses)}. Artifact: {spotify_path}")
+    n_playlists = len(creation["playlists"])
+    print(f"{action} {n_playlists} playlists. Misses: {len(misses)}. Artifact: {spotify_path}")
 
 
 def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
@@ -250,14 +280,14 @@ def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
             for b in data.get("blocks", [])
         ],
     )
-    client = SpotifyClient(
+    with SpotifyClient(
         client_id=settings.spotify_client_id,
         client_secret=settings.spotify_client_secret,
         refresh_token=settings.spotify_refresh_token,
         user_id=settings.spotify_user_id,
-    )
-    mapped_blocks, misses = _map_tracks_to_spotify(client, parsed_page)
-    creation = _create_playlists(client, parsed_page, mapped_blocks, master_playlist)
+    ) as client:
+        mapped_blocks, misses = _map_tracks_to_spotify(client, parsed_page)
+        creation = _create_playlists(client, parsed_page, mapped_blocks, master_playlist)
     slug = parsed.stem
     spotify_path = Path("data/spotify") / f"{slug}.json"
     write_json(
@@ -269,7 +299,10 @@ def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
             "playlists": creation["playlists"],
             "master_playlist": creation.get("master_playlist"),
             "misses": misses,
+            "failed_tracks": creation.get("failed_tracks", []),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    print(f"[replay] Created {len(creation['playlists'])} playlists. Misses: {len(misses)}. Artifact: {spotify_path}")
+    n_playlists = len(creation["playlists"])
+    n_misses = len(misses)
+    print(f"[replay] Created {n_playlists} playlists. Misses: {n_misses}. Artifact: {spotify_path}")
