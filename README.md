@@ -80,6 +80,27 @@ Add `--search-only` to run Spotify search/matching without actually creating pla
 uv run python -m app import https://example.com/playlist-page --search-only
 ```
 
+### Crawl an index page
+
+If you have an index page that links to multiple playlist pages (including PDFs), use `crawl` to process them all:
+
+```bash
+# Dry-run: extract links and parse all discovered pages without creating playlists
+uv run python -m app crawl https://example.com/playlists/index.html --dev
+
+# Full import: parse and create Spotify playlists for all discovered pages
+uv run python -m app crawl https://example.com/playlists/index.html
+
+# Limit to first 5 discovered links
+uv run python -m app crawl https://example.com/playlists/index.html --max-links 5
+```
+
+The crawl command:
+1. Fetches the index page and extracts all links
+2. Uses LLM to identify which links point to playlist/tracklist pages (including PDFs)
+3. Processes each discovered URL through the standard pipeline
+4. Saves a summary to `data/crawl/<slug>.json`
+
 ### Replay from saved data
 
 Re-run Spotify mapping using a previously parsed artifact (skips fetch and LLM calls):
@@ -101,8 +122,10 @@ All data is saved locally for inspection and replay:
 | Location | Contents |
 |----------|----------|
 | `data/raw/<slug>.html` | Original HTML from the source page |
+| `data/raw/<slug>.pdf` | Original PDF (for PDF sources) |
 | `data/parsed/<slug>.json` | Extracted track blocks from LLM |
 | `data/spotify/<slug>.json` | Spotify search results, playlist URLs, and any tracks that couldn't be matched |
+| `data/crawl/<slug>.json` | Crawl summary: discovered links, processing status for each |
 
 ## Example
 
@@ -133,6 +156,8 @@ uv run mypy
 
 ## Notes
 
+- **PDF support**: Automatically detects and extracts text from PDF tracklists using PyMuPDF
+- **Block merging**: When a multi-page PDF produces multiple blocks with the same title, they're merged into one
 - **Playlist naming**: Playlists are named `<source> – <block title> – <date>`, e.g., "hr2 – Hörbar Musik Grenzenlos – 2024-01-15"
 - **Track matching**: Uses fuzzy matching with diacritic normalization. Tries multiple query strategies (artist+track, combined, title-only) to minimize misses
 - **Rate limits**: Automatically retries on Spotify rate limits (429) with exponential backoff

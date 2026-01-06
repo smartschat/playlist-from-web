@@ -28,3 +28,23 @@ class ParsedPage(BaseModel):
     blocks: List[TrackBlock]
 
     model_config = ConfigDict(extra="ignore", frozen=True)
+
+
+class ExtractedLink(BaseModel):
+    """A link extracted from an index page that may contain playlist/track data."""
+
+    url: str
+    description: Optional[str] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class CrawlResult(BaseModel):
+    """Summary of a crawl operation over an index page."""
+
+    index_url: HttpUrl
+    discovered_links: List[ExtractedLink]
+    processed: List[dict]  # List of {url, status, error?, artifact_path?}
+    crawled_at: datetime
+
+    model_config = ConfigDict(extra="ignore")

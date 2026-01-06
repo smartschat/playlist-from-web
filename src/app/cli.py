@@ -204,3 +204,90 @@ def replay(
     except Exception as exc:  # noqa: BLE001
         typer.echo(f"Error: {exc}")
         raise typer.Exit(code=1) from exc
+
+
+@app.command()
+def crawl(
+    index_url: str = typer.Argument(
+        ..., help="URL of the index page to crawl for playlist links."
+    ),
+    dev_mode: bool = typer.Option(
+        False, "--dev", help="Run in dev mode (dry-run, no Spotify writes)."
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Re-fetch pages even if cached."
+    ),
+    master_playlist: Optional[bool] = typer.Option(
+        None,
+        "--master-playlist/--no-master-playlist",
+        help="Override default master playlist creation.",
+    ),
+    search_only: bool = typer.Option(
+        False,
+        "--search-only",
+        help="Run Spotify search/mapping but do not create playlists.",
+    ),
+    max_links: Optional[int] = typer.Option(
+        None,
+        "--max-links",
+        help="Maximum number of discovered links to process.",
+    ),
+) -> None:
+    """
+    Crawl an index page, extract playlist links with LLM, and process all discovered URLs.
+
+    Uses OpenAI to identify links to pages containing playlists or track listings,
+    then processes each link through the normal import or dev pipeline.
+    Supports both HTML pages and PDF files.
+
+    Examples:
+        uv run python -m app crawl https://example.com/playlists --dev
+        uv run python -m app crawl https://example.com/archive --max-links 5
+    """
+    settings = get_settings()
+    setup_logging(settings.log_level)
+
+    master_enabled = (
+        settings.master_playlist_enabled if master_playlist is None else master_playlist
+    )
+
+    mode_str = "dev" if dev_mode else "import"
+    typer.echo(
+        f"[crawl] Processing index {index_url} | mode: {mode_str} | "
+        f"master playlist: {master_enabled} | force: {force}"
+    )
+
+    if not dev_mode:
+        settings.require_spotify_auth()
+
+    try:
+        from .utils import slugify_url
+
+        result = pipeline.run_crawl(
+            index_url=index_url,
+            dev_mode=dev_mode,
+            force=force,
+            master_playlist=master_enabled,
+            settings=settings,
+            write_playlists=not search_only,
+            max_links=max_links,
+        )
+
+        # Summary
+        success_count = sum(1 for p in result.processed if p["status"] == "success")
+        fail_count = sum(1 for p in result.processed if p["status"] == "failed")
+
+        typer.echo(f"\n[crawl] Complete. Discovered {len(result.discovered_links)} links.")
+        typer.echo(f"  Processed: {success_count} succeeded, {fail_count} failed.")
+
+        index_slug = slugify_url(index_url)
+        typer.echo(f"  Summary artifact: data/crawl/{index_slug}.json")
+
+        if fail_count > 0 and success_count == 0:
+            raise typer.Exit(code=1)
+
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(code=1) from exc

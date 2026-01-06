@@ -19,6 +19,11 @@ uv run python -m app dev <url>
 uv run python -m app import <url>
 uv run python -m app import <url> --search-only   # search/map without creating playlists
 
+# Crawl index page (extract links, process all discovered playlists)
+uv run python -m app crawl <index-url> --dev      # dry-run mode
+uv run python -m app crawl <index-url>            # full import
+uv run python -m app crawl <index-url> --max-links 5  # limit to first N links
+
 # Replay from existing parsed artifact
 uv run python -m app replay <data/parsed/foo.json>
 
@@ -33,20 +38,26 @@ uv run mypy
 
 ```
 src/app/
-├── cli.py          # Typer CLI entrypoint (dev, import, replay commands)
+├── cli.py          # Typer CLI entrypoint (dev, import, replay, crawl commands)
 ├── config.py       # Pydantic settings from .env (OpenAI, Spotify creds)
 ├── pipeline.py     # Main orchestration: fetch → parse → map → create playlists
-├── llm.py          # OpenAI integration for extracting track blocks
+├── llm.py          # OpenAI integration for extracting track blocks and links
+├── pdf.py          # PDF text extraction using PyMuPDF
 ├── spotify_client.py # Spotify Web API client (auth, search, playlist creation)
-├── models.py       # Pydantic models: Track, TrackBlock, ParsedPage
+├── models.py       # Pydantic models: Track, TrackBlock, ParsedPage, ExtractedLink, CrawlResult
 └── utils.py        # Helpers: slugify URLs, file I/O
 ```
 
 **Data flow:**
-1. Fetch HTML → save to `data/raw/<slug>.html`
-2. Clean HTML (strip scripts/nav) → send to OpenAI for structured extraction
-3. LLM returns JSON with track blocks → validate with Pydantic → save to `data/parsed/<slug>.json`
+1. Fetch HTML/PDF → save to `data/raw/<slug>.html` or `data/raw/<slug>.pdf`
+2. Clean HTML (strip scripts/nav) or extract PDF text → send to OpenAI for structured extraction
+3. LLM returns JSON with track blocks → merge blocks by title → deduplicate → save to `data/parsed/<slug>.json`
 4. Search Spotify for each track → create playlists → save results to `data/spotify/<slug>.json`
+
+**Crawl flow:**
+1. Fetch index page → extract links in markdown format `[text](url)`
+2. LLM identifies playlist/tracklist links → return list of URLs
+3. Process each URL through standard flow → save crawl summary to `data/crawl/<slug>.json`
 
 ## Configuration
 

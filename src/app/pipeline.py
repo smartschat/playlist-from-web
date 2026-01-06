@@ -2,15 +2,16 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .config import Settings
-from .llm import parse_with_llm
-from .models import ParsedPage, Track, TrackBlock
+from .llm import extract_links_with_llm, parse_with_llm
+from .models import CrawlResult, ExtractedLink, ParsedPage, Track, TrackBlock
+from .pdf import extract_text_from_pdf
 from .spotify_client import (
     SpotifyClient,
     select_description,
@@ -30,6 +31,29 @@ def _clean_text_from_html(html: str) -> str:
     return "\n".join(lines)
 
 
+def _extract_links_from_html(html: str) -> str:
+    """
+    Extract links from HTML, preserving URL information for the LLM.
+
+    Returns a formatted string with each link on its own line:
+    [link text](url)
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+
+    links = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        text = a.get_text(strip=True) or "(no text)"
+        # Skip anchors and javascript
+        if href.startswith("#") or href.startswith("javascript:"):
+            continue
+        links.append(f"[{text}]({href})")
+
+    return "\n".join(links)
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=15),
@@ -40,6 +64,53 @@ def _fetch_html(url: str) -> str:
     resp = httpx.get(url, timeout=30)
     resp.raise_for_status()
     return resp.text
+
+
+def _is_pdf_url(url: str) -> bool:
+    """Check if URL likely points to a PDF based on extension."""
+    return url.lower().rstrip("/").endswith(".pdf")
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=15),
+    retry=retry_if_exception_type((httpx.ConnectError, httpx.ReadTimeout, httpx.HTTPStatusError)),
+    reraise=True,
+)
+def _fetch_pdf(url: str) -> bytes:
+    """Fetch PDF content as bytes."""
+    resp = httpx.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.content
+
+
+def _load_or_fetch_pdf(url: str, slug: str, force: bool) -> Tuple[str, Path]:
+    """Load PDF from cache or fetch, returning extracted text content."""
+    raw_path = Path("data/raw") / f"{slug}.pdf"
+    if raw_path.exists() and not force:
+        pdf_bytes = raw_path.read_bytes()
+    else:
+        pdf_bytes = _fetch_pdf(url)
+        ensure_parent(raw_path)
+        raw_path.write_bytes(pdf_bytes)
+    text = extract_text_from_pdf(pdf_bytes)
+    return text, raw_path
+
+
+def _load_or_fetch_content(url: str, slug: str, force: bool) -> Tuple[str, Path, bool]:
+    """
+    Unified content fetcher for HTML and PDF.
+
+    Returns:
+        Tuple of (text_content, raw_path, is_pdf)
+    """
+    if _is_pdf_url(url):
+        text, raw_path = _load_or_fetch_pdf(url, slug, force)
+        return text, raw_path, True
+    else:
+        html, raw_path = _load_or_fetch_html(url, slug, force)
+        text = _clean_text_from_html(html)
+        return text, raw_path, False
 
 
 def _load_or_fetch_html(url: str, slug: str, force: bool) -> Tuple[str, Path]:
@@ -107,15 +178,35 @@ def _dedupe_blocks_globally(blocks: List[TrackBlock]) -> List[TrackBlock]:
     return result
 
 
+def _merge_blocks_by_title(blocks: List[TrackBlock]) -> List[TrackBlock]:
+    """Merge blocks with matching title and context into single blocks."""
+    merged: Dict[Tuple[str, Optional[str]], TrackBlock] = {}
+
+    for block in blocks:
+        key = (block.title.strip().lower(), (block.context or "").strip().lower() or None)
+        if key in merged:
+            # Append tracks to existing block
+            existing = merged[key]
+            merged[key] = TrackBlock(
+                title=existing.title,
+                context=existing.context,
+                tracks=existing.tracks + block.tracks,
+            )
+        else:
+            merged[key] = block
+
+    return list(merged.values())
+
+
 def _process_url(url: str, force: bool, settings: Settings) -> Tuple[ParsedPage, Path]:
     slug = slugify_url(url)
-    html, raw_path = _load_or_fetch_html(url, slug, force)
-    cleaned = _clean_text_from_html(html)
+    content, raw_path, is_pdf = _load_or_fetch_content(url, slug, force)
     parsed = parse_with_llm(
-        url=url, content=cleaned, model=settings.openai_model, api_key=settings.openai_api_key
+        url=url, content=content, model=settings.openai_model, api_key=settings.openai_api_key
     )
-    # Global deduplication across all blocks
-    deduped_blocks = _dedupe_blocks_globally(parsed.blocks)
+    # Merge blocks with same title/context, then deduplicate tracks globally
+    merged_blocks = _merge_blocks_by_title(parsed.blocks)
+    deduped_blocks = _dedupe_blocks_globally(merged_blocks)
     parsed = ParsedPage(
         source_url=parsed.source_url,
         source_name=parsed.source_name,
@@ -308,3 +399,112 @@ def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
     n_playlists = len(creation["playlists"])
     n_misses = len(misses)
     print(f"[replay] Created {n_playlists} playlists. Misses: {n_misses}. Artifact: {spotify_path}")
+
+
+def _extract_links_from_index(url: str, force: bool, settings: Settings) -> List[ExtractedLink]:
+    """Fetch index page and extract playlist-related links using LLM."""
+    slug = slugify_url(url)
+    html, raw_path = _load_or_fetch_html(url, slug, force)
+    # Use link-preserving extraction for crawling
+    links_content = _extract_links_from_html(html)
+
+    links = extract_links_with_llm(
+        url=url,
+        content=links_content,
+        model=settings.openai_model,
+        api_key=settings.openai_api_key,
+    )
+
+    logger.info("Extracted %d links from index %s", len(links), url)
+    return links
+
+
+def run_crawl(
+    index_url: str,
+    dev_mode: bool,
+    force: bool,
+    master_playlist: bool,
+    settings: Settings,
+    write_playlists: bool = True,
+    max_links: Optional[int] = None,
+) -> CrawlResult:
+    """
+    Crawl an index page and process all discovered playlist URLs.
+
+    Args:
+        index_url: URL of the index page.
+        dev_mode: If True, run in dev mode (no Spotify writes).
+        force: Re-fetch pages even if cached.
+        master_playlist: Whether to create master playlists.
+        settings: Application settings.
+        write_playlists: Whether to write playlists (only relevant if not dev_mode).
+        max_links: Maximum number of links to process (None for unlimited).
+
+    Returns:
+        CrawlResult with summary of all processed URLs.
+    """
+    # Extract links from index page
+    links = _extract_links_from_index(index_url, force, settings)
+
+    if max_links is not None:
+        links = links[:max_links]
+
+    processed: List[Dict] = []
+
+    for i, link in enumerate(links, 1):
+        result: Dict = {"url": link.url, "description": link.description}
+        logger.info("Processing link %d/%d: %s", i, len(links), link.url)
+        try:
+            if dev_mode:
+                run_dev(url=link.url, force=force, settings=settings)
+                result["status"] = "success"
+                result["mode"] = "dev"
+            else:
+                run_import(
+                    url=link.url,
+                    force=force,
+                    master_playlist=master_playlist,
+                    settings=settings,
+                    write_playlists=write_playlists,
+                )
+                result["status"] = "success"
+                result["mode"] = "import"
+
+            # Add artifact path
+            slug = slugify_url(link.url)
+            if dev_mode:
+                result["artifact"] = f"data/parsed/{slug}.json"
+            else:
+                result["artifact"] = f"data/spotify/{slug}.json"
+
+        except Exception as exc:
+            logger.error("Failed to process %s: %s", link.url, exc)
+            result["status"] = "failed"
+            result["error"] = str(exc)
+
+        processed.append(result)
+
+    # Save crawl summary
+    crawl_result = CrawlResult(
+        index_url=index_url,
+        discovered_links=links,
+        processed=processed,
+        crawled_at=datetime.now(timezone.utc),
+    )
+
+    index_slug = slugify_url(index_url)
+    crawl_path = Path("data/crawl") / f"{index_slug}.json"
+    write_json(
+        crawl_path,
+        {
+            "index_url": str(crawl_result.index_url),
+            "discovered_links": [
+                {"url": link.url, "description": link.description}
+                for link in crawl_result.discovered_links
+            ],
+            "processed": crawl_result.processed,
+            "crawled_at": crawl_result.crawled_at.isoformat(),
+        },
+    )
+
+    return crawl_result
