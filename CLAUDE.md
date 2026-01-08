@@ -37,7 +37,10 @@ uv run python -m pytest              # run all tests
 uv run python -m pytest -k test_name # run single test
 uv run ruff check && uv run ruff format
 uv run mypy
+cd src/app/web/frontend && npm run check  # frontend type check
 ```
+
+CI runs lint (Python + frontend) and tests on every push/PR to `main`.
 
 ## Architecture
 
