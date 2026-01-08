@@ -1,14 +1,12 @@
 """Tests for the crawl command and link extraction."""
 
-from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app import pipeline
 from app.config import Settings
-from app.models import ExtractedLink, ParsedPage, Track, TrackBlock
+from app.models import ExtractedLink, Track, TrackBlock
 
 
 @pytest.fixture
@@ -62,9 +60,7 @@ def test_extract_links_from_index(monkeypatch, tmp_path: Path, settings: Setting
     # Mock LLM extraction
     def fake_extract_links(url, content, model, api_key):
         return [
-            ExtractedLink(
-                url="https://example.com/playlist/2024-01-01.pdf", description="January"
-            ),
+            ExtractedLink(url="https://example.com/playlist/2024-01-01.pdf", description="January"),
             ExtractedLink(
                 url="https://example.com/playlist/2024-02-01.pdf", description="February"
             ),
@@ -102,6 +98,7 @@ def test_run_crawl_dev_mode(monkeypatch, tmp_path: Path, settings: Settings) -> 
 
     def fake_run_dev(url, force, settings):
         dev_calls.append(url)
+        return True  # Indicate processing occurred
 
     monkeypatch.setattr(pipeline, "run_dev", fake_run_dev)
 
@@ -138,6 +135,7 @@ def test_run_crawl_max_links(monkeypatch, tmp_path: Path, settings: Settings) ->
 
     def fake_run_dev(url, force, settings):
         dev_calls.append(url)
+        return True  # Indicate processing occurred
 
     monkeypatch.setattr(pipeline, "run_dev", fake_run_dev)
 
@@ -173,6 +171,7 @@ def test_run_crawl_continues_on_error(monkeypatch, tmp_path: Path, settings: Set
         call_count[0] += 1
         if "fail" in url:
             raise ValueError("Simulated failure")
+        return True  # Indicate processing occurred
 
     monkeypatch.setattr(pipeline, "run_dev", fake_run_dev)
 
@@ -200,7 +199,7 @@ def test_crawl_result_saved(monkeypatch, tmp_path: Path, settings: Settings) -> 
         return [ExtractedLink(url="https://example.com/page1", description="Page 1")]
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
-    monkeypatch.setattr(pipeline, "run_dev", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline, "run_dev", lambda *args, **kwargs: True)
 
     pipeline.run_crawl(
         index_url="https://example.com/index",

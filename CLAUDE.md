@@ -28,8 +28,8 @@ uv run python -m app crawl <index-url> --max-links 5  # limit to first N links
 uv run python -m app replay <data/parsed/foo.json>
 
 # Testing & linting
-uv run pytest                    # run all tests
-uv run pytest -k test_name       # run single test
+uv run python -m pytest              # run all tests
+uv run python -m pytest -k test_name # run single test
 uv run ruff check && uv run ruff format
 uv run mypy
 ```

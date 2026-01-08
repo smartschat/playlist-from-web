@@ -190,7 +190,7 @@ def replay(
         readable=True,
         dir_okay=False,
         help="Path to a parsed JSON artifact to re-run Spotify mapping without new LLM calls.",
-    )
+    ),
 ) -> None:
     """
     Re-run Spotify mapping using an existing parsed artifact; skip fetch/LLM.
@@ -208,15 +208,11 @@ def replay(
 
 @app.command()
 def crawl(
-    index_url: str = typer.Argument(
-        ..., help="URL of the index page to crawl for playlist links."
-    ),
+    index_url: str = typer.Argument(..., help="URL of the index page to crawl for playlist links."),
     dev_mode: bool = typer.Option(
         False, "--dev", help="Run in dev mode (dry-run, no Spotify writes)."
     ),
-    force: bool = typer.Option(
-        False, "--force", help="Re-fetch pages even if cached."
-    ),
+    force: bool = typer.Option(False, "--force", help="Re-fetch pages even if cached."),
     master_playlist: Optional[bool] = typer.Option(
         None,
         "--master-playlist/--no-master-playlist",
@@ -275,10 +271,13 @@ def crawl(
 
         # Summary
         success_count = sum(1 for p in result.processed if p["status"] == "success")
+        skipped_count = sum(1 for p in result.processed if p["status"] == "skipped")
         fail_count = sum(1 for p in result.processed if p["status"] == "failed")
 
         typer.echo(f"\n[crawl] Complete. Discovered {len(result.discovered_links)} links.")
-        typer.echo(f"  Processed: {success_count} succeeded, {fail_count} failed.")
+        typer.echo(
+            f"  Processed: {success_count} new, {skipped_count} skipped, {fail_count} failed."
+        )
 
         index_slug = slugify_url(index_url)
         typer.echo(f"  Summary artifact: data/crawl/{index_slug}.json")

@@ -19,9 +19,7 @@ class Settings(BaseSettings):
         default="http://localhost:8888/callback", alias="SPOTIFY_REDIRECT_URI"
     )
 
-    master_playlist_enabled: bool = Field(
-        default=False, alias="MASTER_PLAYLIST_ENABLED"
-    )
+    master_playlist_enabled: bool = Field(default=False, alias="MASTER_PLAYLIST_ENABLED")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     model_config = SettingsConfigDict(
@@ -37,9 +35,7 @@ class Settings(BaseSettings):
                 "SPOTIFY_REFRESH_TOKEN not set. Run 'uv run python -m app auth' first."
             )
         if not self.spotify_user_id:
-            raise ValueError(
-                "SPOTIFY_USER_ID not set. Run 'uv run python -m app auth' first."
-            )
+            raise ValueError("SPOTIFY_USER_ID not set. Run 'uv run python -m app auth' first.")
 
 
 @lru_cache(maxsize=1)
