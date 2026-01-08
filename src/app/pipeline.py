@@ -22,6 +22,22 @@ from .utils import ensure_parent, read_text, slugify_url, write_json
 logger = logging.getLogger(__name__)
 
 
+def _get_artifact_path(url: str, artifact_type: str) -> Path:
+    """Get the artifact path for a URL. artifact_type is 'parsed' or 'spotify'."""
+    slug = slugify_url(url)
+    return Path(f"data/{artifact_type}") / f"{slug}.json"
+
+
+def is_already_imported(url: str) -> bool:
+    """Check if a URL has already been imported (has a spotify artifact)."""
+    return _get_artifact_path(url, "spotify").exists()
+
+
+def is_already_parsed(url: str) -> bool:
+    """Check if a URL has already been parsed (has a parsed artifact)."""
+    return _get_artifact_path(url, "parsed").exists()
+
+
 def _clean_text_from_html(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript", "header", "footer", "nav"]):
@@ -250,11 +266,23 @@ def _map_tracks_to_spotify(
     return mapped_blocks, misses
 
 
-def run_dev(url: str, force: bool, settings: Settings) -> None:
+def run_dev(url: str, force: bool, settings: Settings) -> bool:
+    """
+    Run dev mode (parse only, no Spotify).
+
+    Returns:
+        True if the URL was processed, False if skipped (already parsed).
+    """
+    if not force and is_already_parsed(url):
+        logger.info("Skipping %s – already parsed (use --force to re-parse)", url)
+        print(f"Skipped (already parsed): {url}")
+        return False
+
     parsed, parsed_path = _process_url(url, force, settings)
     logger.info("Parsed %d blocks from %s. Saved to %s", len(parsed.blocks), url, parsed_path)
     typer_msg = f"Parsed {len(parsed.blocks)} blocks. Artifact: {parsed_path}"
     print(typer_msg)
+    return True
 
 
 def _create_playlists(
@@ -313,7 +341,18 @@ def run_import(
     master_playlist: bool,
     settings: Settings,
     write_playlists: bool = True,
-) -> None:
+) -> bool:
+    """
+    Import a URL to Spotify.
+
+    Returns:
+        True if the URL was processed, False if skipped (already imported).
+    """
+    if not force and is_already_imported(url):
+        logger.info("Skipping %s – already imported (use --force to re-import)", url)
+        print(f"Skipped (already imported): {url}")
+        return False
+
     settings.require_spotify_auth()
     parsed, parsed_path = _process_url(url, force, settings)
     with SpotifyClient(
@@ -347,6 +386,7 @@ def run_import(
     action = "Mapped (no write)" if not write_playlists else "Created"
     n_playlists = len(creation["playlists"])
     print(f"{action} {n_playlists} playlists. Misses: {len(misses)}. Artifact: {spotify_path}")
+    return True
 
 
 def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
@@ -456,18 +496,18 @@ def run_crawl(
         logger.info("Processing link %d/%d: %s", i, len(links), link.url)
         try:
             if dev_mode:
-                run_dev(url=link.url, force=force, settings=settings)
-                result["status"] = "success"
+                was_processed = run_dev(url=link.url, force=force, settings=settings)
+                result["status"] = "success" if was_processed else "skipped"
                 result["mode"] = "dev"
             else:
-                run_import(
+                was_processed = run_import(
                     url=link.url,
                     force=force,
                     master_playlist=master_playlist,
                     settings=settings,
                     write_playlists=write_playlists,
                 )
-                result["status"] = "success"
+                result["status"] = "success" if was_processed else "skipped"
                 result["mode"] = "import"
 
             # Add artifact path
