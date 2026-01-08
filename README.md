@@ -9,6 +9,8 @@ A CLI tool that turns any webpage with music track listings into Spotify playlis
 3. **Match** — Searches Spotify for each track using fuzzy matching with fallback queries
 4. **Create** — Builds one playlist per track block, named after the source and date
 
+![Web UI Dashboard](docs/images/dashboard.png)
+
 ## Setup
 
 ### Requirements
