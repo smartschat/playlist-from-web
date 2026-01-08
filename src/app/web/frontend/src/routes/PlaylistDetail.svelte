@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getPlaylist, updatePlaylist } from '../lib/api';
-  import type { ParsedPlaylist, TrackBlock } from '../lib/types';
+  import { getPlaylist, updatePlaylist, getSpotifyArtifact } from '../lib/api';
+  import type { ParsedPlaylist, TrackBlock, SpotifyArtifact } from '../lib/types';
   import BlockCard from '../components/BlockCard.svelte';
+  import SpotifyPanel from '../components/SpotifyPanel.svelte';
 
   export let slug: string;
 
   let playlist: ParsedPlaylist | null = null;
+  let spotifyArtifact: SpotifyArtifact | null = null;
   let loading = true;
   let error: string | null = null;
   let editMode = false;
@@ -18,7 +20,12 @@
 
   onMount(async () => {
     try {
-      playlist = await getPlaylist(slug);
+      const [playlistData, spotifyData] = await Promise.all([
+        getPlaylist(slug),
+        getSpotifyArtifact(slug),
+      ]);
+      playlist = playlistData;
+      spotifyArtifact = spotifyData;
       originalPlaylist = JSON.parse(JSON.stringify(playlist));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load playlist';
@@ -103,6 +110,10 @@
       e.returnValue = '';
     }
   }
+
+  function handleSpotifyUpdate(e: CustomEvent<SpotifyArtifact>) {
+    spotifyArtifact = e.detail;
+  }
 </script>
 
 <svelte:window on:beforeunload={handleBeforeUnload} />
@@ -174,6 +185,17 @@
         </button>
       {/if}
     </div>
+
+    <section class="spotify-section">
+      {#if spotifyArtifact}
+        <SpotifyPanel {slug} artifact={spotifyArtifact} on:update={handleSpotifyUpdate} />
+      {:else}
+        <div class="no-spotify">
+          <p>No Spotify data available for this playlist.</p>
+          <p class="hint">Import this playlist to Spotify using the CLI to enable Spotify integration.</p>
+        </div>
+      {/if}
+    </section>
   {/if}
 </div>
 
@@ -335,5 +357,27 @@
     border-color: #1db954;
     color: #1db954;
     background: #f0fdf4;
+  }
+
+  .spotify-section {
+    margin-top: 3rem;
+  }
+
+  .no-spotify {
+    text-align: center;
+    padding: 2rem;
+    background: #f9fafb;
+    border: 1px dashed #e5e7eb;
+    border-radius: 12px;
+    color: #666;
+  }
+
+  .no-spotify p {
+    margin: 0.5rem 0;
+  }
+
+  .no-spotify .hint {
+    font-size: 0.875rem;
+    color: #999;
   }
 </style>
