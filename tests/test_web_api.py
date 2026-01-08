@@ -270,9 +270,7 @@ def test_get_spotify_artifact(
     assert len(artifact["misses"]) == 1
 
 
-def test_get_spotify_artifact_not_found(
-    client: TestClient, monkeypatch, tmp_path: Path
-) -> None:
+def test_get_spotify_artifact_not_found(client: TestClient, monkeypatch, tmp_path: Path) -> None:
     """Test getting a non-existent Spotify artifact returns 404."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "data" / "spotify").mkdir(parents=True)
@@ -362,9 +360,7 @@ def test_search_spotify(client: TestClient, monkeypatch) -> None:
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     response = client.post(
         "/api/spotify/search",
@@ -405,7 +401,10 @@ def test_remap_playlist(
     mock_client = MagicMock()
     mock_client.search_track.side_effect = [
         # First track matches
-        {"uri": "spotify:track:new1", "external_urls": {"spotify": "https://open.spotify.com/track/new1"}},
+        {
+            "uri": "spotify:track:new1",
+            "external_urls": {"spotify": "https://open.spotify.com/track/new1"},
+        },
         # Second track doesn't match
         None,
     ]
@@ -415,9 +414,7 @@ def test_remap_playlist(
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     response = client.post("/api/spotify/test-playlist/remap")
     assert response.status_code == 200
@@ -441,9 +438,7 @@ def test_update_spotify_playlist_name(client: TestClient, monkeypatch) -> None:
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     response = client.put(
         "/api/spotify/playlists/playlist123",
@@ -478,9 +473,7 @@ def test_update_spotify_playlist_name_persists(
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     # Update with slug to persist locally
     response = client.put(
@@ -515,9 +508,7 @@ def test_delete_spotify_playlist(
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     response = client.delete("/api/spotify/playlists/playlist123?slug=test-playlist")
     assert response.status_code == 200
@@ -584,9 +575,7 @@ def test_sync_spotify_playlist_block_specific(
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     # Sync playlist_a (Block A)
     response = client.post("/api/spotify/playlists/playlist_a/sync?slug=test-playlist")
@@ -599,9 +588,7 @@ def test_sync_spotify_playlist_block_specific(
     )
 
 
-def test_sync_spotify_master_playlist(
-    client: TestClient, monkeypatch, tmp_path: Path
-) -> None:
+def test_sync_spotify_master_playlist(client: TestClient, monkeypatch, tmp_path: Path) -> None:
     """Test syncing master playlist syncs all tracks from all blocks."""
     from unittest.mock import MagicMock
 
@@ -646,9 +633,7 @@ def test_sync_spotify_master_playlist(
     def mock_get_client():
         return mock_client
 
-    monkeypatch.setattr(
-        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
-    )
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
 
     # Sync master playlist
     response = client.post("/api/spotify/playlists/master_playlist/sync?slug=test-playlist")
