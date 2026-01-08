@@ -29,6 +29,7 @@ packages = ["src/app"]
 dev = [
     "pytest>=8.3.3",
     "pytest-asyncio>=0.23.8",
+    "pytest-cov>=6.0.0",
     "ruff>=0.6.8",
     "mypy>=1.11.2",
 ]
