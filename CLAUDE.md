@@ -27,6 +27,11 @@ uv run python -m app crawl <index-url> --max-links 5  # limit to first N links
 # Replay from existing parsed artifact
 uv run python -m app replay <data/parsed/foo.json>
 
+# Web UI (view and manage playlists)
+uv run python -m app serve              # start server on port 8000
+uv run python -m app serve --reload     # with hot reload for development
+# Frontend dev server: cd src/app/web/frontend && npm run dev
+
 # Testing & linting
 uv run python -m pytest              # run all tests
 uv run python -m pytest -k test_name # run single test
@@ -38,14 +43,17 @@ uv run mypy
 
 ```
 src/app/
-├── cli.py          # Typer CLI entrypoint (dev, import, replay, crawl commands)
+├── cli.py          # Typer CLI entrypoint (dev, import, replay, crawl, serve commands)
 ├── config.py       # Pydantic settings from .env (OpenAI, Spotify creds)
 ├── pipeline.py     # Main orchestration: fetch → parse → map → create playlists
 ├── llm.py          # OpenAI integration for extracting track blocks and links
 ├── pdf.py          # PDF text extraction using PyMuPDF
 ├── spotify_client.py # Spotify Web API client (auth, search, playlist creation)
 ├── models.py       # Pydantic models: Track, TrackBlock, ParsedPage, ExtractedLink, CrawlResult
-└── utils.py        # Helpers: slugify URLs, file I/O
+├── utils.py        # Helpers: slugify URLs, file I/O
+└── web/            # Web UI (FastAPI backend + Svelte frontend)
+    ├── api/        # FastAPI routes and services
+    └── frontend/   # Svelte 5 + Vite app
 ```
 
 **Data flow:**

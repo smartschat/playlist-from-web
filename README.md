@@ -109,6 +109,31 @@ Re-run Spotify mapping using a previously parsed artifact (skips fetch and LLM c
 uv run python -m app replay data/parsed/example-com-playlist-page.json
 ```
 
+### Web UI
+
+View and manage your extracted playlists through a web interface:
+
+```bash
+# Start the server
+uv run python -m app serve
+
+# Open http://localhost:8000 in your browser
+```
+
+For development with hot reload:
+
+```bash
+# Terminal 1: Backend with reload
+uv run python -m app serve --reload
+
+# Terminal 2: Frontend dev server
+cd src/app/web/frontend
+npm install  # first time only
+npm run dev
+
+# Open http://localhost:5173
+```
+
 ### Options
 
 - `--force` — Re-fetch and re-parse even if artifacts already exist
