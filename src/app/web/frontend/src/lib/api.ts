@@ -1,4 +1,4 @@
-import type { ParsedPlaylist, PlaylistSummary } from './types';
+import type { ParsedPlaylist, PlaylistSummary, SpotifyArtifact, SpotifySearchResult } from './types';
 
 const API_BASE = '/api';
 
@@ -47,4 +47,65 @@ export async function deletePlaylist(slug: string, alsoSpotify = false): Promise
 // Health check
 export async function healthCheck(): Promise<{ status: string }> {
   return fetchJson<{ status: string }>('/health');
+}
+
+// Spotify API
+export async function getSpotifyArtifact(slug: string): Promise<SpotifyArtifact | null> {
+  try {
+    return await fetchJson<SpotifyArtifact>(`/spotify/${slug}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function searchSpotify(artist: string, title: string): Promise<SpotifySearchResult[]> {
+  return fetchJson<SpotifySearchResult[]>('/spotify/search', {
+    method: 'POST',
+    body: JSON.stringify({ artist, title }),
+  });
+}
+
+export async function remapPlaylist(slug: string): Promise<SpotifyArtifact> {
+  return fetchJson<SpotifyArtifact>(`/spotify/${slug}/remap`, {
+    method: 'POST',
+  });
+}
+
+export async function assignTrackUri(
+  slug: string,
+  blockIdx: number,
+  trackIdx: number,
+  uri: string,
+  url?: string
+): Promise<SpotifyArtifact> {
+  return fetchJson<SpotifyArtifact>(`/spotify/${slug}/tracks/${blockIdx}/${trackIdx}/assign`, {
+    method: 'POST',
+    body: JSON.stringify({ uri, url }),
+  });
+}
+
+export async function updateSpotifyPlaylist(
+  playlistId: string,
+  name?: string,
+  description?: string,
+  slug?: string
+): Promise<void> {
+  const params = slug ? `?slug=${slug}` : '';
+  await fetchJson(`/spotify/playlists/${playlistId}${params}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export async function syncSpotifyPlaylist(playlistId: string, slug: string): Promise<{ tracks_synced: number }> {
+  return fetchJson<{ tracks_synced: number }>(`/spotify/playlists/${playlistId}/sync?slug=${slug}`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteSpotifyPlaylist(playlistId: string, slug?: string): Promise<void> {
+  const params = slug ? `?slug=${slug}` : '';
+  await fetchJson(`/spotify/playlists/${playlistId}${params}`, {
+    method: 'DELETE',
+  });
 }

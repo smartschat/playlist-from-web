@@ -241,7 +241,7 @@ npm run dev
 
 ---
 
-### Phase 4: Spotify Integration
+### Phase 4: Spotify Integration ✅
 
 **Goal**: View and manage Spotify mappings.
 
@@ -396,7 +396,7 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 
 ## File Summary
 
-### Files Created (Phase 1, 2 & 3)
+### Files Created (Phase 1-4)
 
 | File | Description |
 |------|-------------|
@@ -405,6 +405,7 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 | `src/app/web/api/main.py` | FastAPI app factory |
 | `src/app/web/api/routes/__init__.py` | Routes package init |
 | `src/app/web/api/routes/playlists.py` | Playlist CRUD endpoints |
+| `src/app/web/api/routes/spotify.py` | Spotify API endpoints |
 | `src/app/web/api/services/__init__.py` | Services package init |
 | `src/app/web/api/services/data_service.py` | Data file operations |
 | `src/app/web/frontend/*` | Svelte project (Vite) |
@@ -415,6 +416,10 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 | `src/app/web/frontend/src/components/TrackRow.svelte` | Track row with inline editing |
 | `src/app/web/frontend/src/components/BlockCard.svelte` | Block card with editing |
 | `src/app/web/frontend/src/components/AddTrackForm.svelte` | Form to add new tracks |
+| `src/app/web/frontend/src/components/SpotifyPanel.svelte` | Spotify integration panel |
+| `src/app/web/frontend/src/components/SpotifySearchModal.svelte` | Spotify search modal |
+| `src/app/web/frontend/src/components/SpotifyPlaylistCard.svelte` | Spotify playlist card |
+| `src/app/web/frontend/src/components/MissRow.svelte` | Miss row with search action |
 
 ### Files Modified
 
@@ -422,19 +427,17 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 |------|--------|
 | `pyproject.toml` | Added fastapi, uvicorn dependencies |
 | `src/app/cli.py` | Added `serve` command |
+| `src/app/spotify_client.py` | Added playlist management methods |
 
 ### Files to Create (Future Phases)
 
 | File | Phase | Description |
 |------|-------|-------------|
-| `src/app/web/api/routes/spotify.py` | 4 | Spotify API endpoints |
 | `src/app/web/api/routes/imports.py` | 5 | Import endpoints |
 | `src/app/web/api/routes/crawls.py` | 5 | Crawl endpoints |
-| `src/app/web/frontend/src/routes/SpotifyPanel.svelte` | 4 | Spotify panel view |
 | `src/app/web/frontend/src/routes/Import.svelte` | 5 | Import form view |
 | `src/app/web/frontend/src/routes/CrawlList.svelte` | 5 | Crawl list view |
 | `src/app/web/frontend/src/routes/CrawlDetail.svelte` | 5 | Crawl detail view |
-| `src/app/web/frontend/src/components/SpotifySearchModal.svelte` | 4 | Spotify search modal |
 
 ---
 
@@ -465,13 +468,13 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 - [x] Save persists changes
 - [x] Unsaved changes warning
 
-#### Phase 4 (Planned)
-- [ ] Spotify panel shows misses
-- [ ] Can search Spotify manually
-- [ ] Can assign URI to miss
-- [ ] Can re-map playlist
-- [ ] Can rename Spotify playlist
-- [ ] Can delete Spotify playlist
+#### Phase 4 (Completed)
+- [x] Spotify panel shows misses
+- [x] Can search Spotify manually
+- [x] Can assign URI to miss
+- [x] Can re-map playlist
+- [x] Can rename Spotify playlist
+- [x] Can delete Spotify playlist
 
 #### Phase 5 (Planned)
 - [ ] Can enter URL and preview

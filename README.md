@@ -134,7 +134,13 @@ uv run python -m app replay data/parsed/<slug>.json
 
 ## Web UI
 
-View and manage extracted playlists through a web interface.
+View and manage extracted playlists through a web interface:
+
+- Browse all parsed playlists and track blocks
+- Edit tracks, blocks, and metadata inline
+- View Spotify mapping status (matches and misses)
+- Manually search and assign Spotify URIs for unmatched tracks
+- Rename or delete Spotify playlists
 
 ![Web UI Dashboard](dashboard.png)
 

@@ -192,6 +192,121 @@ class SpotifyClient:
         )
         resp.raise_for_status()
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    )
+    def get_playlist(self, playlist_id: str) -> Dict:
+        """Get playlist details from Spotify."""
+        resp = self._http.get(
+            f"https://api.spotify.com/v1/playlists/{playlist_id}",
+            headers=self._auth_header(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    )
+    def update_playlist_details(
+        self, playlist_id: str, name: Optional[str] = None, description: Optional[str] = None
+    ) -> None:
+        """Update playlist name and/or description."""
+        payload: Dict[str, str] = {}
+        if name is not None:
+            payload["name"] = name
+        if description is not None:
+            payload["description"] = description
+        if not payload:
+            return
+        resp = self._http.put(
+            f"https://api.spotify.com/v1/playlists/{playlist_id}",
+            headers=self._auth_header(),
+            json=payload,
+        )
+        resp.raise_for_status()
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    )
+    def replace_playlist_tracks(self, playlist_id: str, uris: List[str]) -> None:
+        """Replace all tracks in a playlist with the given URIs.
+
+        Note: Spotify's PUT endpoint only accepts up to 100 URIs.
+        For larger playlists, we clear and then add in chunks.
+        """
+        if len(uris) <= 100:
+            resp = self._http.put(
+                f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
+                headers=self._auth_header(),
+                json={"uris": uris},
+            )
+            resp.raise_for_status()
+        else:
+            # Clear playlist first, then add tracks in chunks
+            resp = self._http.put(
+                f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
+                headers=self._auth_header(),
+                json={"uris": []},
+            )
+            resp.raise_for_status()
+            self.add_tracks(playlist_id, uris)
+
+    def remove_tracks(self, playlist_id: str, uris: List[str]) -> Tuple[int, List[str]]:
+        """Remove tracks from playlist with partial failure recovery.
+
+        Returns:
+            Tuple of (tracks_removed, failed_uris)
+        """
+        removed = 0
+        failed: List[str] = []
+        # Spotify allows up to 100 URIs per request.
+        for i in range(0, len(uris), 100):
+            chunk = uris[i : i + 100]
+            try:
+                self._remove_tracks_chunk(playlist_id, chunk)
+                removed += len(chunk)
+            except Exception as exc:
+                logger.warning("Failed to remove chunk %d-%d: %s", i, i + len(chunk), exc)
+                failed.extend(chunk)
+        return removed, failed
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    )
+    def _remove_tracks_chunk(self, playlist_id: str, uris: List[str]) -> None:
+        resp = self._http.delete(
+            f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
+            headers=self._auth_header(),
+            json={"tracks": [{"uri": uri} for uri in uris]},
+        )
+        resp.raise_for_status()
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+    )
+    def unfollow_playlist(self, playlist_id: str) -> None:
+        """Unfollow (delete) a playlist."""
+        resp = self._http.delete(
+            f"https://api.spotify.com/v1/playlists/{playlist_id}/followers",
+            headers=self._auth_header(),
+        )
+        resp.raise_for_status()
+
 
 def select_playlist_name(
     source_name: Optional[str], block_title: str, fetched_at: str, context: Optional[str]
