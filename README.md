@@ -2,8 +2,6 @@
 
 A CLI tool that turns any webpage with music track listings into Spotify playlists. Point it at a radio station's playlist page, a blog post listing songs, or any public webpage with artist/track info — it uses an LLM to extract the tracks and creates playlists in your Spotify account.
 
-![Web UI Dashboard](dashboard.png)
-
 ## Table of Contents
 
 - [Quick Start](#quick-start)
@@ -131,6 +129,8 @@ uv run python -m app replay data/parsed/<slug>.json
 ## Web UI
 
 View and manage extracted playlists through a web interface.
+
+![Web UI Dashboard](dashboard.png)
 
 **Note:** Requires the frontend to be built first (see Quick Start).
 
