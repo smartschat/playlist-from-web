@@ -80,6 +80,17 @@ Copy `.env.example` to `.env` with:
 ## Code Style
 
 - Python 3.12+, type hints throughout
-- snake_case for functions/variables, PascalCase for classes
+- snake_case for functions/variables, PascalCase for classes, kebab-case for filenames
 - Ruff for linting (E, F, W, I rules), line length 100
+- Keep functions small; add comments only when intent is non-obvious
+
+## Testing
+
 - Tests in `tests/` directory, pytest with `pythonpath = ["src"]`
+- Mock external APIs (Spotify, OpenAI) in tests; never hit live APIs in CI
+- Run `uv run python -m pytest` before pushing
+
+## Commits
+
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, etc.
+- Keep PRs focused; split large changes into reviewable chunks
