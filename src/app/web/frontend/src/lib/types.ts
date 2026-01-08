@@ -62,3 +62,17 @@ export interface CrawlSummary {
   skipped_count: number;
   failed_count: number;
 }
+
+export interface SpotifySearchResult {
+  uri: string;
+  name: string;
+  artists: string[];
+  album: string;
+  url: string;
+}
+
+export interface Miss {
+  block: string;
+  artist: string;
+  title: string;
+}
