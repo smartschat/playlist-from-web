@@ -94,3 +94,27 @@ Copy `.env.example` to `.env` with:
 
 - Use conventional commits: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, etc.
 - Keep PRs focused; split large changes into reviewable chunks
+
+## Screenshots
+
+Use Playwright to capture screenshots of the web UI:
+
+```bash
+# Ensure server is running
+uv run python -m app serve
+
+# Capture screenshot
+uv run python -c "
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={'width': 1200, 'height': 700})
+    page.goto('http://localhost:8000')
+    page.wait_for_load_state('networkidle')
+    page.screenshot(path='screenshot.png')
+    browser.close()
+"
+```
+
+Add sample data to `data/parsed/` if needed (JSON files with playlist metadata).
