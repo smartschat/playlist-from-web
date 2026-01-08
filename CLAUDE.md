@@ -57,6 +57,9 @@ src/app/
 └── web/            # Web UI (FastAPI backend + Svelte frontend)
     ├── api/        # FastAPI routes and services
     └── frontend/   # Svelte 5 + Vite app
+        ├── src/lib/        # API client, types
+        ├── src/routes/     # Page components (Dashboard, PlaylistDetail)
+        └── src/components/ # Reusable components (BlockCard, TrackRow, AddTrackForm)
 ```
 
 **Data flow:**
