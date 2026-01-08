@@ -207,6 +207,29 @@ def replay(
 
 
 @app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to."),
+    port: int = typer.Option(8000, "--port", help="Port to listen on."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development."),
+) -> None:
+    """
+    Start the web UI server.
+
+    Examples:
+        uv run python -m app serve
+        uv run python -m app serve --port 8080 --reload
+    """
+    import uvicorn
+
+    uvicorn.run(
+        "app.web.api.main:app",
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
+@app.command()
 def crawl(
     index_url: str = typer.Argument(..., help="URL of the index page to crawl for playlist links."),
     dev_mode: bool = typer.Option(
