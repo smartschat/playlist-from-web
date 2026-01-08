@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import playlists
+from .routes import playlists, spotify
 
 
 def create_app() -> FastAPI:
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(playlists.router)
+    app.include_router(spotify.router)
 
     # Health check endpoint
     @app.get("/api/health")
