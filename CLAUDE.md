@@ -92,7 +92,7 @@ Copy `.env.example` to `.env` with:
 
 - Tests in `tests/` directory, pytest with `pythonpath = ["src"]`
 - Mock external APIs (Spotify, OpenAI) in tests; never hit live APIs in CI
-- Run `uv run python -m pytest` before pushing
+- **Before pushing, always run:** `uv run ruff check && uv run ruff format --check && uv run python -m pytest`
 
 ## Commits
 
