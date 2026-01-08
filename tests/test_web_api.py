@@ -431,7 +431,7 @@ def test_remap_playlist(
 
 
 def test_update_spotify_playlist_name(client: TestClient, monkeypatch) -> None:
-    """Test updating a Spotify playlist name (mocked)."""
+    """Test updating a Spotify playlist name (mocked, no artifact)."""
     from unittest.mock import MagicMock
 
     mock_client = MagicMock()
@@ -456,6 +456,43 @@ def test_update_spotify_playlist_name(client: TestClient, monkeypatch) -> None:
     mock_client.update_playlist_details.assert_called_once_with(
         playlist_id="playlist123", name="New Playlist Name", description=None
     )
+
+
+def test_update_spotify_playlist_name_persists(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_spotify_artifact: dict
+) -> None:
+    """Test updating a Spotify playlist name persists to local artifact."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    spotify_dir = tmp_path / "data" / "spotify"
+    spotify_dir.mkdir(parents=True)
+
+    spotify_file = spotify_dir / "test-playlist.json"
+    spotify_file.write_text(json.dumps(sample_spotify_artifact))
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr(
+        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
+    )
+
+    # Update with slug to persist locally
+    response = client.put(
+        "/api/spotify/playlists/playlist123?slug=test-playlist",
+        json={"name": "Renamed Playlist"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "updated"
+
+    # Verify the artifact was updated
+    updated_artifact = json.loads(spotify_file.read_text())
+    assert updated_artifact["playlists"][0]["name"] == "Renamed Playlist"
 
 
 def test_delete_spotify_playlist(

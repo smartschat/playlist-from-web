@@ -195,7 +195,9 @@ def assign_track_uri(
 
 
 @router.put("/playlists/{playlist_id}")
-def update_spotify_playlist(playlist_id: str, req: PlaylistUpdateRequest) -> dict[str, str]:
+def update_spotify_playlist(
+    playlist_id: str, req: PlaylistUpdateRequest, slug: str | None = None
+) -> dict[str, str]:
     """Update a Spotify playlist's name and/or description."""
     if req.name is None and req.description is None:
         raise HTTPException(status_code=400, detail="Must provide name or description to update")
@@ -207,6 +209,27 @@ def update_spotify_playlist(playlist_id: str, req: PlaylistUpdateRequest) -> dic
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update playlist: {e}")
+
+    # Persist changes to local artifact
+    if slug:
+        artifact = data_service.get_spotify_artifact(slug)
+        if artifact:
+            # Update in playlists list
+            for p in artifact.get("playlists", []):
+                if p.get("id") == playlist_id:
+                    if req.name is not None:
+                        p["name"] = req.name
+                    if req.description is not None:
+                        p["description"] = req.description
+                    break
+            # Check master playlist
+            master = artifact.get("master_playlist")
+            if master and master.get("id") == playlist_id:
+                if req.name is not None:
+                    master["name"] = req.name
+                if req.description is not None:
+                    master["description"] = req.description
+            data_service.save_spotify_artifact(slug, artifact)
 
     return {"status": "updated", "playlist_id": playlist_id}
 

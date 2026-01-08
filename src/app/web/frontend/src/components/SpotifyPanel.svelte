@@ -107,7 +107,7 @@
   ) {
     const { playlist, newName } = e.detail;
     try {
-      await updateSpotifyPlaylist(playlist.id, newName);
+      await updateSpotifyPlaylist(playlist.id, newName, undefined, slug);
       // Update local artifact
       const updated = { ...artifact };
       const p = updated.playlists.find((p) => p.id === playlist.id);

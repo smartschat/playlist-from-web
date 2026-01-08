@@ -87,9 +87,11 @@ export async function assignTrackUri(
 export async function updateSpotifyPlaylist(
   playlistId: string,
   name?: string,
-  description?: string
+  description?: string,
+  slug?: string
 ): Promise<void> {
-  await fetchJson(`/spotify/playlists/${playlistId}`, {
+  const params = slug ? `?slug=${slug}` : '';
+  await fetchJson(`/spotify/playlists/${playlistId}${params}`, {
     method: 'PUT',
     body: JSON.stringify({ name, description }),
   });
