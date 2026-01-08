@@ -59,8 +59,10 @@
   }
 
   function handleTrackUpdate(index: number, updatedTrack: Track) {
+    // Strip the transient dnd id if present
+    const { id, ...trackWithoutId } = updatedTrack as Track & { id?: number };
     const newTracks = [...block.tracks];
-    newTracks[index] = updatedTrack;
+    newTracks[index] = trackWithoutId as Track;
     dispatch('update', { ...block, tracks: newTracks });
   }
 
