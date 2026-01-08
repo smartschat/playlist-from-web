@@ -196,47 +196,48 @@ npm run dev
 
 ## Planned Work
 
-### Phase 3: Playlist Editing
+### Phase 3: Playlist Editing ✅
 
 **Goal**: Enable inline editing of tracks and blocks.
 
-**Already Done**:
-- Hash-based routing implemented in App.svelte
-- `PlaylistDetail.svelte` provides read-only view of playlists
-- Route `#/playlist/{slug}` displays playlist detail
+**Frontend Components Created**:
 
-**Backend Changes**:
-- Endpoints already exist (`PUT /api/playlists/{slug}`)
-
-**Frontend Components to Create**:
-
-1. **Extend `src/routes/PlaylistDetail.svelte`** (or create `PlaylistEditor.svelte`)
-   - Add edit mode toggle
-   - Enable inline editing of tracks and blocks
+1. **`src/components/TrackRow.svelte`**
+   - Single track row in a table
+   - Double-click to edit artist/title/album inline
+   - Delete button with confirmation
+   - Drag handle for reordering
+   - Press Enter to save, Escape to cancel
 
 2. **`src/components/BlockCard.svelte`**
    - Displays a single block (title, context, track list)
-   - Inline editing for block title and context
-   - Add/remove block functionality
+   - Double-click to edit block title and context
+   - Delete block button
+   - Uses drag-and-drop via `svelte-dnd-action` for track reordering
+   - Includes AddTrackForm for adding new tracks
 
-3. **`src/components/TrackRow.svelte`**
-   - Single track row in a table
-   - Inline editing: click to edit artist/title/album
-   - Delete button
-   - Drag handle for reordering
-
-4. **`src/components/AddTrackForm.svelte`**
+3. **`src/components/AddTrackForm.svelte`**
    - Form to add a new track to a block
-   - Fields: artist, title, album (optional)
+   - Fields: artist (required), title (required), album (optional)
+   - Cancel/Add buttons
 
-**Features**:
-- Click on track field to edit inline
+4. **`src/routes/PlaylistDetail.svelte`** (extended)
+   - Edit mode toggle button
+   - Save Changes / Cancel buttons
+   - "Unsaved changes" badge indicator
+   - Add Block button in edit mode
+   - Browser beforeunload warning for unsaved changes
+   - Error banner for save failures
+
+**Features Implemented**:
+- Double-click on track/block field to edit inline
 - Press Enter to save, Escape to cancel
 - Drag-and-drop track reordering with `svelte-dnd-action`
 - Add new track button per block
-- Delete track with confirmation
-- Save button to persist changes
+- Delete track/block with confirmation
+- Save button persists changes via PUT /api/playlists/{slug}
 - Unsaved changes indicator
+- Discard changes confirmation when canceling edit mode
 
 ---
 
@@ -395,7 +396,7 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 
 ## File Summary
 
-### Files Created (Phase 1 & 2)
+### Files Created (Phase 1, 2 & 3)
 
 | File | Description |
 |------|-------------|
@@ -410,7 +411,10 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 | `src/app/web/frontend/src/lib/types.ts` | TypeScript types |
 | `src/app/web/frontend/src/lib/api.ts` | API client |
 | `src/app/web/frontend/src/routes/Dashboard.svelte` | Dashboard view |
-| `src/app/web/frontend/src/routes/PlaylistDetail.svelte` | Read-only playlist detail view |
+| `src/app/web/frontend/src/routes/PlaylistDetail.svelte` | Playlist detail with editing |
+| `src/app/web/frontend/src/components/TrackRow.svelte` | Track row with inline editing |
+| `src/app/web/frontend/src/components/BlockCard.svelte` | Block card with editing |
+| `src/app/web/frontend/src/components/AddTrackForm.svelte` | Form to add new tracks |
 
 ### Files Modified
 
@@ -426,13 +430,10 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 | `src/app/web/api/routes/spotify.py` | 4 | Spotify API endpoints |
 | `src/app/web/api/routes/imports.py` | 5 | Import endpoints |
 | `src/app/web/api/routes/crawls.py` | 5 | Crawl endpoints |
-| `src/app/web/frontend/src/routes/PlaylistEditor.svelte` | 3 | Playlist editor view |
 | `src/app/web/frontend/src/routes/SpotifyPanel.svelte` | 4 | Spotify panel view |
 | `src/app/web/frontend/src/routes/Import.svelte` | 5 | Import form view |
 | `src/app/web/frontend/src/routes/CrawlList.svelte` | 5 | Crawl list view |
 | `src/app/web/frontend/src/routes/CrawlDetail.svelte` | 5 | Crawl detail view |
-| `src/app/web/frontend/src/components/BlockCard.svelte` | 3 | Block display/edit |
-| `src/app/web/frontend/src/components/TrackRow.svelte` | 3 | Track row with editing |
 | `src/app/web/frontend/src/components/SpotifySearchModal.svelte` | 4 | Spotify search modal |
 
 ---
@@ -454,13 +455,15 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 - [x] Playlist detail shows all blocks and tracks
 - [x] Breadcrumb navigation back to dashboard works
 
-#### Phase 3 (Planned)
-- [ ] Can edit track artist/title
-- [ ] Can add new track
-- [ ] Can delete track
-- [ ] Can reorder tracks with drag-and-drop
-- [ ] Save persists changes
-- [ ] Unsaved changes warning
+#### Phase 3 (Completed)
+- [x] Can edit track artist/title/album (double-click)
+- [x] Can add new track
+- [x] Can delete track
+- [x] Can reorder tracks with drag-and-drop
+- [x] Can edit block title/context
+- [x] Can add/delete blocks
+- [x] Save persists changes
+- [x] Unsaved changes warning
 
 #### Phase 4 (Planned)
 - [ ] Spotify panel shows misses
