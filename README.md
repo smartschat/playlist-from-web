@@ -85,6 +85,12 @@ uv run python -m app auth
 
 This opens your browser, asks you to log in, and saves your refresh token and user ID to `.env`. You only need to do this once.
 
+For headless servers (no browser), use `--headless` to print the auth URL and paste the callback URL manually:
+
+```bash
+uv run python -m app auth --headless
+```
+
 ## Commands
 
 ### `dev` — Test parsing without Spotify writes

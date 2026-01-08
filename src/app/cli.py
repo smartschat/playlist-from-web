@@ -39,30 +39,49 @@ def auth(
         "--save/--no-save",
         help="Save tokens to .env file.",
     ),
+    headless: bool = typer.Option(
+        False,
+        "--headless",
+        help="Headless mode: print auth URL, prompt for callback (for servers without browsers).",
+    ),
 ) -> None:
     """
     Authenticate with Spotify and obtain a refresh token.
 
     Opens your browser to log in to Spotify, then saves the refresh token
     to your .env file. You only need to run this once.
+
+    Use --headless for servers without a browser (e.g., Raspberry Pi).
     """
-    from .spotify_auth import get_user_id, run_oauth_flow
+    from .spotify_auth import get_user_id, run_oauth_flow, run_oauth_flow_headless
 
     if not client_id or not client_secret:
         typer.echo("Error: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required.")
         typer.echo("Set them as environment variables or pass --client-id and --client-secret.")
         raise typer.Exit(code=1)
 
-    typer.echo("Opening browser for Spotify authorization...")
-    typer.echo(f"Redirect URI: {redirect_uri}")
-    typer.echo("(Make sure this URI is registered in your Spotify app settings)\n")
+    if headless:
+        typer.echo("Running in headless mode...")
+        typer.echo(f"Redirect URI: {redirect_uri}")
+        typer.echo("(Make sure this URI is registered in your Spotify app settings)")
+    else:
+        typer.echo("Opening browser for Spotify authorization...")
+        typer.echo(f"Redirect URI: {redirect_uri}")
+        typer.echo("(Make sure this URI is registered in your Spotify app settings)\n")
 
     try:
-        tokens = run_oauth_flow(
-            client_id=client_id,
-            client_secret=client_secret,
-            redirect_uri=redirect_uri,
-        )
+        if headless:
+            tokens = run_oauth_flow_headless(
+                client_id=client_id,
+                client_secret=client_secret,
+                redirect_uri=redirect_uri,
+            )
+        else:
+            tokens = run_oauth_flow(
+                client_id=client_id,
+                client_secret=client_secret,
+                redirect_uri=redirect_uri,
+            )
     except TimeoutError as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(code=1) from e

@@ -190,3 +190,64 @@ def get_user_id(access_token: str) -> str:
     )
     response.raise_for_status()
     return response.json()["id"]
+
+
+def run_oauth_flow_headless(
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str = "http://localhost:8888/callback",
+) -> dict:
+    """
+    Run OAuth flow for headless environments (no browser).
+
+    Prints the auth URL for the user to open manually, then prompts for
+    the callback URL after authorization.
+
+    Args:
+        client_id: Spotify client ID
+        client_secret: Spotify client secret
+        redirect_uri: OAuth redirect URI (must match Spotify app settings)
+
+    Returns:
+        Dict with access_token, refresh_token, expires_in, etc.
+
+    Raises:
+        RuntimeError: If auth fails for any reason
+    """
+    state = secrets.token_urlsafe(16)
+    auth_url = get_auth_url(client_id, redirect_uri, state)
+
+    print("\n" + "=" * 60)
+    print("Open this URL in a browser to authorize:")
+    print("=" * 60)
+    print(f"\n{auth_url}\n")
+    print("=" * 60)
+    print("\nAfter authorizing, you'll be redirected to a URL like:")
+    print(f"  {redirect_uri}?code=XXXX&state=YYYY")
+    print("\nPaste the FULL callback URL here (it's OK if the page didn't load):")
+
+    callback_url = input("\nCallback URL: ").strip()
+
+    # Parse the callback URL
+    parsed = urllib.parse.urlparse(callback_url)
+    params = urllib.parse.parse_qs(parsed.query)
+
+    if "error" in params:
+        raise RuntimeError(f"Spotify authorization failed: {params['error'][0]}")
+
+    if "code" not in params:
+        raise RuntimeError(
+            "No authorization code found in URL. Make sure you pasted the complete callback URL."
+        )
+
+    code = params["code"][0]
+
+    # Exchange code for tokens
+    tokens = exchange_code_for_tokens(
+        code=code,
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+    )
+
+    return tokens
