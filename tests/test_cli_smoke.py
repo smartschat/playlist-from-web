@@ -13,4 +13,5 @@ def test_help_succeeds() -> None:
 def test_serve_help_succeeds() -> None:
     result = runner.invoke(app, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "--port" in result.output
+    # Check for port option (may contain ANSI codes in CI)
+    assert "port" in result.output.lower()

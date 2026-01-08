@@ -125,15 +125,17 @@ class DataService:
             slug = path.stem
             processed = data.get("processed", [])
 
-            crawls.append({
-                "slug": slug,
-                "index_url": data.get("index_url"),
-                "crawled_at": data.get("crawled_at"),
-                "link_count": len(data.get("discovered_links", [])),
-                "success_count": sum(1 for p in processed if p.get("status") == "success"),
-                "skipped_count": sum(1 for p in processed if p.get("status") == "skipped"),
-                "failed_count": sum(1 for p in processed if p.get("status") == "failed"),
-            })
+            crawls.append(
+                {
+                    "slug": slug,
+                    "index_url": data.get("index_url"),
+                    "crawled_at": data.get("crawled_at"),
+                    "link_count": len(data.get("discovered_links", [])),
+                    "success_count": sum(1 for p in processed if p.get("status") == "success"),
+                    "skipped_count": sum(1 for p in processed if p.get("status") == "skipped"),
+                    "failed_count": sum(1 for p in processed if p.get("status") == "failed"),
+                }
+            )
 
         return crawls
 
