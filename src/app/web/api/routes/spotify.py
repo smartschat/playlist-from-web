@@ -241,31 +241,62 @@ def sync_spotify_playlist(playlist_id: str, slug: str) -> dict[str, Any]:
     if artifact is None:
         raise HTTPException(status_code=404, detail=f"Spotify artifact not found: {slug}")
 
-    # Find the playlist in the artifact
+    # Find the playlist in the artifact and determine if it's the master
     playlist_info = None
-    for p in artifact.get("playlists", []):
-        if p.get("id") == playlist_id:
-            playlist_info = p
-            break
+    is_master = False
+    playlist_index = -1
+
+    master = artifact.get("master_playlist")
+    if master and master.get("id") == playlist_id:
+        playlist_info = master
+        is_master = True
+    else:
+        for idx, p in enumerate(artifact.get("playlists", [])):
+            if p.get("id") == playlist_id:
+                playlist_info = p
+                playlist_index = idx
+                break
 
     if playlist_info is None:
-        # Check master playlist
-        master = artifact.get("master_playlist")
-        if master and master.get("id") == playlist_id:
-            playlist_info = master
-        else:
-            raise HTTPException(
-                status_code=404, detail=f"Playlist not found in artifact: {playlist_id}"
-            )
+        raise HTTPException(
+            status_code=404, detail=f"Playlist not found in artifact: {playlist_id}"
+        )
 
-    # Collect URIs from the corresponding block(s)
-    # For now, we'll sync all tracks that have URIs from all blocks
+    # Collect URIs based on playlist type
     uris: list[str] = []
-    for block in artifact.get("blocks", []):
-        for track in block.get("tracks", []):
-            uri = track.get("spotify_uri")
-            if uri:
-                uris.append(uri)
+    blocks = artifact.get("blocks", [])
+
+    if is_master:
+        # Master playlist: sync all tracks from all blocks
+        for block in blocks:
+            for track in block.get("tracks", []):
+                uri = track.get("spotify_uri")
+                if uri:
+                    uris.append(uri)
+    else:
+        # Block-specific playlist: find the matching block
+        # Try to match by block title in playlist name
+        playlist_name = playlist_info.get("name", "")
+        matching_block = None
+
+        for block in blocks:
+            block_title = block.get("title", "")
+            if block_title and block_title in playlist_name:
+                matching_block = block
+                break
+
+        # If no match by name, use playlist index if valid
+        if matching_block is None and 0 <= playlist_index < len(blocks):
+            matching_block = blocks[playlist_index]
+
+        if matching_block:
+            for track in matching_block.get("tracks", []):
+                uri = track.get("spotify_uri")
+                if uri:
+                    uris.append(uri)
+        else:
+            # Fallback: use the playlist's stored tracks
+            uris = list(playlist_info.get("tracks", []))
 
     with _get_spotify_client() as client:
         try:

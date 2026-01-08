@@ -526,3 +526,136 @@ def test_delete_spotify_playlist(
     # Verify the playlist was removed from artifact
     saved_artifact = json.loads(spotify_file.read_text())
     assert len(saved_artifact["playlists"]) == 0
+
+
+def test_sync_spotify_playlist_block_specific(
+    client: TestClient, monkeypatch, tmp_path: Path
+) -> None:
+    """Test syncing a block-specific playlist only syncs that block's tracks."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    spotify_dir = tmp_path / "data" / "spotify"
+    spotify_dir.mkdir(parents=True)
+
+    # Create artifact with multiple blocks and playlists
+    multi_block_artifact = {
+        "source_url": "https://example.com/playlist",
+        "blocks": [
+            {
+                "title": "Block A",
+                "tracks": [
+                    {"artist": "Artist A1", "title": "Song A1", "spotify_uri": "spotify:track:a1"},
+                    {"artist": "Artist A2", "title": "Song A2", "spotify_uri": "spotify:track:a2"},
+                ],
+            },
+            {
+                "title": "Block B",
+                "tracks": [
+                    {"artist": "Artist B1", "title": "Song B1", "spotify_uri": "spotify:track:b1"},
+                ],
+            },
+        ],
+        "playlists": [
+            {
+                "id": "playlist_a",
+                "name": "Test - Block A - 2025-01-01",
+                "tracks": ["spotify:track:a1", "spotify:track:a2"],
+                "tracks_added": 2,
+            },
+            {
+                "id": "playlist_b",
+                "name": "Test - Block B - 2025-01-01",
+                "tracks": ["spotify:track:b1"],
+                "tracks_added": 1,
+            },
+        ],
+        "master_playlist": None,
+        "misses": [],
+    }
+
+    spotify_file = spotify_dir / "test-playlist.json"
+    spotify_file.write_text(json.dumps(multi_block_artifact))
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr(
+        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
+    )
+
+    # Sync playlist_a (Block A)
+    response = client.post("/api/spotify/playlists/playlist_a/sync?slug=test-playlist")
+    assert response.status_code == 200
+    assert response.json()["tracks_synced"] == 2
+
+    # Verify only Block A tracks were synced (not all 3 tracks)
+    mock_client.replace_playlist_tracks.assert_called_with(
+        "playlist_a", ["spotify:track:a1", "spotify:track:a2"]
+    )
+
+
+def test_sync_spotify_master_playlist(
+    client: TestClient, monkeypatch, tmp_path: Path
+) -> None:
+    """Test syncing master playlist syncs all tracks from all blocks."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    spotify_dir = tmp_path / "data" / "spotify"
+    spotify_dir.mkdir(parents=True)
+
+    # Create artifact with multiple blocks and a master playlist
+    multi_block_artifact = {
+        "source_url": "https://example.com/playlist",
+        "blocks": [
+            {
+                "title": "Block A",
+                "tracks": [
+                    {"artist": "Artist A1", "title": "Song A1", "spotify_uri": "spotify:track:a1"},
+                ],
+            },
+            {
+                "title": "Block B",
+                "tracks": [
+                    {"artist": "Artist B1", "title": "Song B1", "spotify_uri": "spotify:track:b1"},
+                ],
+            },
+        ],
+        "playlists": [],
+        "master_playlist": {
+            "id": "master_playlist",
+            "name": "Test - All - 2025-01-01",
+            "tracks": ["spotify:track:a1", "spotify:track:b1"],
+            "tracks_added": 2,
+        },
+        "misses": [],
+    }
+
+    spotify_file = spotify_dir / "test-playlist.json"
+    spotify_file.write_text(json.dumps(multi_block_artifact))
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr(
+        "app.web.api.routes.spotify._get_spotify_client", mock_get_client
+    )
+
+    # Sync master playlist
+    response = client.post("/api/spotify/playlists/master_playlist/sync?slug=test-playlist")
+    assert response.status_code == 200
+    assert response.json()["tracks_synced"] == 2
+
+    # Verify all tracks from all blocks were synced
+    mock_client.replace_playlist_tracks.assert_called_with(
+        "master_playlist", ["spotify:track:a1", "spotify:track:b1"]
+    )
