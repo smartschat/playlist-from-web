@@ -68,6 +68,7 @@ def test_search_track_fallback_queries(monkeypatch) -> None:
 
 def test_search_track_returns_none_when_similarity_low(monkeypatch) -> None:
     client = make_client()
+
     def fake_search(query: str, limit: int = 20):
         return [
             {
