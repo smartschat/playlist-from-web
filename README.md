@@ -177,7 +177,16 @@ uv run ruff format
 
 # Type check (optional)
 uv run mypy
+
+# Frontend type check
+cd src/app/web/frontend && npm run check
 ```
+
+### CI
+
+GitHub Actions runs on every push and PR to `main`:
+- **Lint**: Python (ruff) and frontend (svelte-check) type checking
+- **Tests**: pytest with coverage report
 
 ## Notes
 
