@@ -148,7 +148,7 @@ export async function reprocessCrawlUrl(
   idx: number,
   devMode = false,
   force = false
-): Promise<{ url: string; status: string; error?: string }> {
+): Promise<{ url: string; status: string; mode?: string; artifact?: string; error?: string }> {
   return fetchJson(`/crawls/${slug}/reprocess/${idx}`, {
     method: 'POST',
     body: JSON.stringify({ dev_mode: devMode, force }),

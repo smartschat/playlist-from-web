@@ -773,6 +773,9 @@ def test_reprocess_crawl_url(
     # Verify the crawl file was updated
     updated_crawl = json.loads(crawl_file.read_text())
     assert updated_crawl["processed"][1]["status"] == "success"
+    assert updated_crawl["processed"][1].get("artifact") is not None
+    # Verify stale error was cleared
+    assert "error" not in updated_crawl["processed"][1]
 
 
 def test_reprocess_crawl_url_invalid_index(

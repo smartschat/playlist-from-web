@@ -98,15 +98,15 @@ def reprocess_url(slug: str, idx: int, req: ReprocessRequest) -> dict[str, Any]:
         else:
             result["artifact"] = f"data/spotify/{url_slug}.json"
 
-        # Clear any previous error
-        result.pop("error", None)
-
     except Exception as exc:
         result["status"] = "failed"
         result["error"] = str(exc)
 
-    # Update the crawl result
-    processed[idx] = {**entry, **result}
+    # Update the crawl result, clearing stale error on success
+    updated_entry = {**entry, **result}
+    if result["status"] != "failed":
+        updated_entry.pop("error", None)
+    processed[idx] = updated_entry
     crawl["processed"] = processed
 
     # Save updated crawl

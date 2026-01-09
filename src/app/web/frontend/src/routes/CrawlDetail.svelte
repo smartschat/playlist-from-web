@@ -32,10 +32,12 @@
     reprocessingIdx = idx;
     try {
       const result = await reprocessCrawlUrl(slug, idx, devMode, true);
-      // Update the local state
+      // Update the local state with all returned fields
       crawl.processed[idx] = {
         ...crawl.processed[idx],
         status: result.status as 'success' | 'skipped' | 'failed',
+        mode: result.mode,
+        artifact: result.artifact,
         error: result.error,
       };
       crawl = crawl; // Trigger reactivity
