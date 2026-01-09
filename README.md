@@ -1,5 +1,10 @@
 # playlist-from-web
 
+![Python](https://img.shields.io/badge/python-3.12+-blue)
+![Svelte](https://img.shields.io/badge/svelte-5-orange)
+[![Tests](https://github.com/smartschat/playlist-from-web/actions/workflows/test.yml/badge.svg)](https://github.com/smartschat/playlist-from-web/actions/workflows/test.yml)
+[![Lint](https://github.com/smartschat/playlist-from-web/actions/workflows/lint.yml/badge.svg)](https://github.com/smartschat/playlist-from-web/actions/workflows/lint.yml)
+
 A CLI tool that turns any webpage with music track listings into Spotify playlists. Point it at a radio station's playlist page, a blog post listing songs, or any public webpage with artist/track info — it uses an LLM to extract the tracks and creates playlists in your Spotify account.
 
 ## Table of Contents
