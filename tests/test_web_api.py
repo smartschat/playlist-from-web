@@ -644,3 +644,240 @@ def test_sync_spotify_master_playlist(client: TestClient, monkeypatch, tmp_path:
     mock_client.replace_playlist_tracks.assert_called_with(
         "master_playlist", ["spotify:track:a1", "spotify:track:b1"]
     )
+
+
+# --- Crawl API tests ---
+
+
+@pytest.fixture
+def sample_crawl_data() -> dict:
+    """Sample crawl result data."""
+    return {
+        "index_url": "https://example.com/index",
+        "discovered_links": [
+            {"url": "https://example.com/playlist1", "description": "Playlist 1"},
+            {"url": "https://example.com/playlist2", "description": "Playlist 2"},
+        ],
+        "processed": [
+            {
+                "url": "https://example.com/playlist1",
+                "description": "Playlist 1",
+                "status": "success",
+                "mode": "import",
+                "artifact": "data/spotify/example-com-playlist1.json",
+            },
+            {
+                "url": "https://example.com/playlist2",
+                "description": "Playlist 2",
+                "status": "failed",
+                "error": "Connection timeout",
+            },
+        ],
+        "crawled_at": "2025-01-01T12:00:00+00:00",
+    }
+
+
+def test_list_crawls_empty(client: TestClient, monkeypatch, tmp_path: Path) -> None:
+    """Test listing crawls when none exist."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data" / "crawl").mkdir(parents=True)
+
+    response = client.get("/api/crawls")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_crawls(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_crawl_data: dict
+) -> None:
+    """Test listing crawls returns crawl summaries."""
+    monkeypatch.chdir(tmp_path)
+    crawl_dir = tmp_path / "data" / "crawl"
+    crawl_dir.mkdir(parents=True)
+
+    crawl_file = crawl_dir / "example-com-index.json"
+    crawl_file.write_text(json.dumps(sample_crawl_data))
+
+    response = client.get("/api/crawls")
+    assert response.status_code == 200
+
+    crawls = response.json()
+    assert len(crawls) == 1
+    assert crawls[0]["slug"] == "example-com-index"
+    assert crawls[0]["index_url"] == "https://example.com/index"
+    assert crawls[0]["link_count"] == 2
+    assert crawls[0]["success_count"] == 1
+    assert crawls[0]["failed_count"] == 1
+
+
+def test_get_crawl(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_crawl_data: dict
+) -> None:
+    """Test getting a single crawl by slug."""
+    monkeypatch.chdir(tmp_path)
+    crawl_dir = tmp_path / "data" / "crawl"
+    crawl_dir.mkdir(parents=True)
+
+    crawl_file = crawl_dir / "example-com-index.json"
+    crawl_file.write_text(json.dumps(sample_crawl_data))
+
+    response = client.get("/api/crawls/example-com-index")
+    assert response.status_code == 200
+
+    crawl = response.json()
+    assert crawl["index_url"] == "https://example.com/index"
+    assert len(crawl["discovered_links"]) == 2
+    assert len(crawl["processed"]) == 2
+
+
+def test_get_crawl_not_found(client: TestClient, monkeypatch, tmp_path: Path) -> None:
+    """Test getting a non-existent crawl returns 404."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data" / "crawl").mkdir(parents=True)
+
+    response = client.get("/api/crawls/non-existent")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+def test_reprocess_crawl_url(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_crawl_data: dict
+) -> None:
+    """Test reprocessing a failed URL from a crawl."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    crawl_dir = tmp_path / "data" / "crawl"
+    parsed_dir = tmp_path / "data" / "parsed"
+    crawl_dir.mkdir(parents=True)
+    parsed_dir.mkdir(parents=True)
+
+    crawl_file = crawl_dir / "example-com-index.json"
+    crawl_file.write_text(json.dumps(sample_crawl_data))
+
+    # Mock run_dev to succeed
+    mock_run_dev = MagicMock(return_value=True)
+    monkeypatch.setattr("app.web.api.routes.crawls.run_dev", mock_run_dev)
+
+    # Reprocess the failed URL (index 1) in dev mode
+    response = client.post(
+        "/api/crawls/example-com-index/reprocess/1",
+        json={"dev_mode": True, "force": True},
+    )
+    assert response.status_code == 200
+
+    result = response.json()
+    assert result["status"] == "success"
+    assert result["mode"] == "dev"
+
+    # Verify the crawl file was updated
+    updated_crawl = json.loads(crawl_file.read_text())
+    assert updated_crawl["processed"][1]["status"] == "success"
+
+
+def test_reprocess_crawl_url_invalid_index(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_crawl_data: dict
+) -> None:
+    """Test reprocessing with invalid index returns error."""
+    monkeypatch.chdir(tmp_path)
+    crawl_dir = tmp_path / "data" / "crawl"
+    crawl_dir.mkdir(parents=True)
+
+    crawl_file = crawl_dir / "example-com-index.json"
+    crawl_file.write_text(json.dumps(sample_crawl_data))
+
+    response = client.post(
+        "/api/crawls/example-com-index/reprocess/99",
+        json={"dev_mode": True},
+    )
+    assert response.status_code == 400
+    assert "invalid index" in response.json()["detail"].lower()
+
+
+# --- Import API tests ---
+
+
+def test_preview_import(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
+) -> None:
+    """Test previewing an import (dev mode)."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    parsed_dir.mkdir(parents=True)
+
+    # Mock run_dev to create a parsed file
+    def mock_run_dev(url, force, settings):
+        parsed_file = parsed_dir / "example-com-playlist.json"
+        parsed_file.write_text(json.dumps(sample_playlist_data))
+        return True
+
+    monkeypatch.setattr("app.web.api.routes.imports.run_dev", mock_run_dev)
+
+    # Mock slugify_url
+    monkeypatch.setattr(
+        "app.web.api.routes.imports.slugify_url", lambda url: "example-com-playlist"
+    )
+
+    response = client.post(
+        "/api/import/preview",
+        json={"url": "https://example.com/playlist", "force": False},
+    )
+    assert response.status_code == 200
+
+    result = response.json()
+    assert result["slug"] == "example-com-playlist"
+    assert result["source_name"] == "Test Playlist"
+    assert result["block_count"] == 1
+    assert result["track_count"] == 2
+
+
+def test_execute_import(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_spotify_artifact: dict
+) -> None:
+    """Test executing a full import."""
+    monkeypatch.chdir(tmp_path)
+    spotify_dir = tmp_path / "data" / "spotify"
+    spotify_dir.mkdir(parents=True)
+
+    # Mock run_import to create a spotify file
+    def mock_run_import(url, force, master_playlist, settings, write_playlists):
+        spotify_file = spotify_dir / "example-com-playlist.json"
+        spotify_file.write_text(json.dumps(sample_spotify_artifact))
+        return True
+
+    monkeypatch.setattr("app.web.api.routes.imports.run_import", mock_run_import)
+
+    # Mock slugify_url
+    monkeypatch.setattr(
+        "app.web.api.routes.imports.slugify_url", lambda url: "example-com-playlist"
+    )
+
+    response = client.post(
+        "/api/import/execute",
+        json={"url": "https://example.com/playlist", "force": False},
+    )
+    assert response.status_code == 200
+
+    result = response.json()
+    assert result["slug"] == "example-com-playlist"
+    assert result["playlist_count"] == 1
+    assert result["miss_count"] == 1
+
+
+def test_preview_import_failure(client: TestClient, monkeypatch, tmp_path: Path) -> None:
+    """Test preview import handles errors gracefully."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data" / "parsed").mkdir(parents=True)
+
+    # Mock run_dev to raise an exception
+    def mock_run_dev(url, force, settings):
+        raise RuntimeError("Connection failed")
+
+    monkeypatch.setattr("app.web.api.routes.imports.run_dev", mock_run_dev)
+
+    response = client.post(
+        "/api/import/preview",
+        json={"url": "https://example.com/playlist"},
+    )
+    assert response.status_code == 500
+    assert "failed to parse" in response.json()["detail"].lower()
