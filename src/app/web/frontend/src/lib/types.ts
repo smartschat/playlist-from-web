@@ -76,3 +76,38 @@ export interface Miss {
   artist: string;
   title: string;
 }
+
+// Import types
+export interface ImportPreviewResponse {
+  slug: string;
+  source_url: string;
+  source_name: string | null;
+  block_count: number;
+  track_count: number;
+  blocks: TrackBlock[];
+}
+
+export interface ImportExecuteResponse {
+  slug: string;
+  source_url: string;
+  playlist_count: number;
+  miss_count: number;
+  has_master: boolean;
+}
+
+// Crawl types
+export interface CrawlProcessedEntry {
+  url: string;
+  description?: string;
+  status: 'success' | 'skipped' | 'failed';
+  mode?: string;
+  artifact?: string;
+  error?: string;
+}
+
+export interface CrawlDetail {
+  index_url: string;
+  discovered_links: { url: string; description: string }[];
+  processed: CrawlProcessedEntry[];
+  crawled_at: string;
+}

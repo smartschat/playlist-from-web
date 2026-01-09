@@ -1,4 +1,13 @@
-import type { ParsedPlaylist, PlaylistSummary, SpotifyArtifact, SpotifySearchResult } from './types';
+import type {
+  CrawlDetail,
+  CrawlSummary,
+  ImportExecuteResponse,
+  ImportPreviewResponse,
+  ParsedPlaylist,
+  PlaylistSummary,
+  SpotifyArtifact,
+  SpotifySearchResult,
+} from './types';
 
 const API_BASE = '/api';
 
@@ -107,5 +116,41 @@ export async function deleteSpotifyPlaylist(playlistId: string, slug?: string): 
   const params = slug ? `?slug=${slug}` : '';
   await fetchJson(`/spotify/playlists/${playlistId}${params}`, {
     method: 'DELETE',
+  });
+}
+
+// Import API
+export async function previewImport(url: string, force = false): Promise<ImportPreviewResponse> {
+  return fetchJson<ImportPreviewResponse>('/import/preview', {
+    method: 'POST',
+    body: JSON.stringify({ url, force }),
+  });
+}
+
+export async function executeImport(url: string, force = false): Promise<ImportExecuteResponse> {
+  return fetchJson<ImportExecuteResponse>('/import/execute', {
+    method: 'POST',
+    body: JSON.stringify({ url, force }),
+  });
+}
+
+// Crawl API
+export async function listCrawls(): Promise<CrawlSummary[]> {
+  return fetchJson<CrawlSummary[]>('/crawls');
+}
+
+export async function getCrawl(slug: string): Promise<CrawlDetail> {
+  return fetchJson<CrawlDetail>(`/crawls/${slug}`);
+}
+
+export async function reprocessCrawlUrl(
+  slug: string,
+  idx: number,
+  devMode = false,
+  force = false
+): Promise<{ url: string; status: string; error?: string }> {
+  return fetchJson(`/crawls/${slug}/reprocess/${idx}`, {
+    method: 'POST',
+    body: JSON.stringify({ dev_mode: devMode, force }),
   });
 }
