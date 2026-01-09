@@ -141,6 +141,8 @@ View and manage extracted playlists through a web interface:
 - View Spotify mapping status (matches and misses)
 - Manually search and assign Spotify URIs for unmatched tracks
 - Rename or delete Spotify playlists
+- Import new URLs directly from the browser (preview before importing)
+- View crawl results and retry failed URLs
 
 ![Web UI Dashboard](dashboard.png)
 

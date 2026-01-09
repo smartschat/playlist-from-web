@@ -56,10 +56,10 @@ src/app/
 ├── utils.py        # Helpers: slugify URLs, file I/O
 └── web/            # Web UI (FastAPI backend + Svelte frontend)
     ├── api/        # FastAPI routes and services
-    │   └── routes/ # REST endpoints (playlists, spotify)
+    │   └── routes/ # REST endpoints (playlists, spotify, imports, crawls)
     └── frontend/   # Svelte 5 + Vite app
         ├── src/lib/        # API client, types
-        ├── src/routes/     # Page components (Dashboard, PlaylistDetail)
+        ├── src/routes/     # Page components (Dashboard, PlaylistDetail, Import, CrawlList, CrawlDetail)
         └── src/components/ # Reusable components (BlockCard, TrackRow, SpotifyPanel, etc.)
 ```
 

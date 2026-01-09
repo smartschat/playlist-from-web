@@ -303,7 +303,7 @@ DELETE /api/spotify/playlists/{pid}            # Unfollow playlist
 
 ---
 
-### Phase 5: Import & Crawl
+### Phase 5: Import & Crawl ✅
 
 **Goal**: Import new URLs and manage crawl results from the UI.
 
@@ -324,25 +324,22 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 
 1. **`src/routes/Import.svelte`**
    - URL input field
-   - Options: dev mode, force re-fetch
+   - Options: force re-fetch
    - "Preview" button → shows parsed blocks before import
    - "Import" button → full import to Spotify
-   - Progress/status display
+   - Progress/status display with spinner
+   - Success state with link to view playlist
 
 2. **`src/routes/CrawlList.svelte`**
    - List all crawl results
    - Shows: index URL, date, success/skipped/failed counts
+   - Link to view crawl details
 
 3. **`src/routes/CrawlDetail.svelte`**
    - Shows all discovered links from a crawl
    - Status per link: success, skipped, failed
-   - "Reprocess" button for failed links
+   - "Reprocess" button for failed links (dev mode or full import)
    - Link to view imported playlist
-
-4. **`src/components/ImportProgress.svelte`**
-   - Progress bar during import
-   - Status messages
-   - Error display
 
 **Features**:
 - Preview parsed data before creating playlists
@@ -428,16 +425,21 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 | `pyproject.toml` | Added fastapi, uvicorn dependencies |
 | `src/app/cli.py` | Added `serve` command |
 | `src/app/spotify_client.py` | Added playlist management methods |
+| `src/app/web/api/main.py` | Added imports, crawls routers |
+| `src/app/web/frontend/src/lib/api.ts` | Added import/crawl API functions |
+| `src/app/web/frontend/src/lib/types.ts` | Added import/crawl types |
+| `src/app/web/frontend/src/App.svelte` | Added import/crawl routes |
+| `src/app/web/frontend/src/routes/Dashboard.svelte` | Added navigation buttons |
 
-### Files to Create (Future Phases)
+### Files Created (Phase 5)
 
-| File | Phase | Description |
-|------|-------|-------------|
-| `src/app/web/api/routes/imports.py` | 5 | Import endpoints |
-| `src/app/web/api/routes/crawls.py` | 5 | Crawl endpoints |
-| `src/app/web/frontend/src/routes/Import.svelte` | 5 | Import form view |
-| `src/app/web/frontend/src/routes/CrawlList.svelte` | 5 | Crawl list view |
-| `src/app/web/frontend/src/routes/CrawlDetail.svelte` | 5 | Crawl detail view |
+| File | Description |
+|------|-------------|
+| `src/app/web/api/routes/imports.py` | Import preview/execute endpoints |
+| `src/app/web/api/routes/crawls.py` | Crawl list/detail/reprocess endpoints |
+| `src/app/web/frontend/src/routes/Import.svelte` | Import form view |
+| `src/app/web/frontend/src/routes/CrawlList.svelte` | Crawl list view |
+| `src/app/web/frontend/src/routes/CrawlDetail.svelte` | Crawl detail view |
 
 ---
 
@@ -476,13 +478,13 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 - [x] Can rename Spotify playlist
 - [x] Can delete Spotify playlist
 
-#### Phase 5 (Planned)
-- [ ] Can enter URL and preview
-- [ ] Can import new URL
-- [ ] Import shows progress
-- [ ] Crawl list shows all crawls
-- [ ] Can view crawl details
-- [ ] Can reprocess failed URLs
+#### Phase 5 (Completed)
+- [x] Can enter URL and preview
+- [x] Can import new URL
+- [x] Import shows progress
+- [x] Crawl list shows all crawls
+- [x] Can view crawl details
+- [x] Can reprocess failed URLs
 
 ---
 
