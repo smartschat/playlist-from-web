@@ -26,8 +26,14 @@ htmlcov/
 data/raw/
 data/parsed/
 data/spotify/
+data/crawl/
 logs/
 !data/raw/.gitkeep
 !data/parsed/.gitkeep
 !data/spotify/.gitkeep
+!data/crawl/.gitkeep
 !logs/.gitkeep
+
+# Frontend
+src/app/web/frontend/node_modules/
+src/app/web/frontend/dist/

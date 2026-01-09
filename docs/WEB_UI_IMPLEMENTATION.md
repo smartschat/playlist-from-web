@@ -350,11 +350,11 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 
 ---
 
-### Phase 6: Production Setup
+### Phase 6: Production Setup ✅
 
 **Goal**: Single command to serve both API and frontend.
 
-**Changes**:
+**Completed**:
 
 1. **Build frontend for production**:
    ```bash
@@ -363,7 +363,7 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
    # Outputs to dist/
    ```
 
-2. **FastAPI serves static files** (already configured in `main.py`):
+2. **FastAPI serves static files** (configured in `main.py`):
    ```python
    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
    if frontend_dist.exists():
@@ -376,17 +376,11 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
    # Serves API at /api/* and frontend at /*
    ```
 
-4. **Update `.gitignore`**:
+4. **Updated `.gitignore`**:
    ```
    src/app/web/frontend/node_modules/
    src/app/web/frontend/dist/
-   ```
-
-5. **Add build script to package.json or Makefile**:
-   ```bash
-   # Build frontend and run server
-   cd src/app/web/frontend && npm run build
-   cd ../../../.. && uv run python -m app serve
+   data/crawl/
    ```
 
 ---
@@ -485,6 +479,13 @@ POST   /api/crawls/{slug}/reprocess/{idx}  # Retry failed URL
 - [x] Crawl list shows all crawls
 - [x] Can view crawl details
 - [x] Can reprocess failed URLs
+
+#### Phase 6 (Completed)
+- [x] Frontend builds without errors
+- [x] `.gitignore` updated for node_modules/dist
+- [x] Single `serve` command serves API and frontend
+- [x] Static files served from dist/
+- [x] API endpoints work in production mode
 
 ---
 
