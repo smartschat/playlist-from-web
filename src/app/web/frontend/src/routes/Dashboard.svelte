@@ -36,8 +36,16 @@
 
 <div class="dashboard">
   <header class="page-header">
-    <h1>Playlist Importer</h1>
-    <p class="subtitle">Manage your extracted playlists</p>
+    <div class="header-top">
+      <div>
+        <h1>Playlist Importer</h1>
+        <p class="subtitle">Manage your extracted playlists</p>
+      </div>
+      <nav class="header-nav">
+        <a href="#/import" class="nav-btn">Import URL</a>
+        <a href="#/crawls" class="nav-btn nav-btn-secondary">Crawls</a>
+      </nav>
+    </div>
   </header>
 
   <div class="toolbar">
@@ -112,6 +120,46 @@
 
   .page-header {
     margin-bottom: 2rem;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .header-nav {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.625rem 1rem;
+    background: #1db954;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background 0.15s, transform 0.15s;
+  }
+
+  .nav-btn:hover {
+    background: #1aa34a;
+    transform: translateY(-1px);
+  }
+
+  .nav-btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+  }
+
+  .nav-btn-secondary:hover {
+    background: #e5e7eb;
   }
 
   .page-header h1 {

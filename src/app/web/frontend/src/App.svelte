@@ -2,6 +2,9 @@
   import { onMount } from 'svelte';
   import Dashboard from './routes/Dashboard.svelte';
   import PlaylistDetail from './routes/PlaylistDetail.svelte';
+  import Import from './routes/Import.svelte';
+  import CrawlList from './routes/CrawlList.svelte';
+  import CrawlDetail from './routes/CrawlDetail.svelte';
 
   let currentRoute = '';
   let routeParams: Record<string, string> = {};
@@ -14,6 +17,28 @@
     if (playlistMatch) {
       currentRoute = 'playlist';
       routeParams = { slug: decodeURIComponent(playlistMatch[1]) };
+      return;
+    }
+
+    // Match /import
+    if (hash === '/import') {
+      currentRoute = 'import';
+      routeParams = {};
+      return;
+    }
+
+    // Match /crawls
+    if (hash === '/crawls') {
+      currentRoute = 'crawls';
+      routeParams = {};
+      return;
+    }
+
+    // Match /crawl/:slug
+    const crawlMatch = hash.match(/^\/crawl\/(.+)$/);
+    if (crawlMatch) {
+      currentRoute = 'crawl';
+      routeParams = { slug: decodeURIComponent(crawlMatch[1]) };
       return;
     }
 
@@ -32,6 +57,12 @@
 <main>
   {#if currentRoute === 'playlist'}
     <PlaylistDetail slug={routeParams.slug} />
+  {:else if currentRoute === 'import'}
+    <Import />
+  {:else if currentRoute === 'crawls'}
+    <CrawlList />
+  {:else if currentRoute === 'crawl'}
+    <CrawlDetail slug={routeParams.slug} />
   {:else}
     <Dashboard />
   {/if}
