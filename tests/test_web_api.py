@@ -427,6 +427,163 @@ def test_remap_playlist(
     assert result["misses"][0]["artist"] == "Artist 2"
 
 
+def test_create_spotify_playlists(
+    client: TestClient,
+    monkeypatch,
+    tmp_path: Path,
+    sample_playlist_data: dict,
+) -> None:
+    """Test creating Spotify playlists from a parsed playlist."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    spotify_dir = tmp_path / "data" / "spotify"
+    parsed_dir.mkdir(parents=True)
+    spotify_dir.mkdir(parents=True)
+
+    # Create only parsed file (no spotify artifact yet)
+    parsed_file = parsed_dir / "test-playlist.json"
+    parsed_file.write_text(json.dumps(sample_playlist_data))
+
+    # Mock the SpotifyClient
+    mock_client = MagicMock()
+    mock_client.search_track.side_effect = [
+        # First track matches
+        {
+            "uri": "spotify:track:123",
+            "external_urls": {"spotify": "https://open.spotify.com/track/123"},
+        },
+        # Second track doesn't match
+        None,
+    ]
+    mock_client.create_playlist.return_value = {
+        "id": "new_playlist_id",
+        "name": "Test Playlist - Block 1 - 2025-01-01",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/new_playlist_id"},
+    }
+    mock_client.add_tracks.return_value = (1, [])  # 1 added, 0 failed
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
+
+    response = client.post("/api/spotify/test-playlist/create")
+    assert response.status_code == 200
+
+    result = response.json()
+    # Should have created one playlist
+    assert len(result["playlists"]) == 1
+    assert result["playlists"][0]["id"] == "new_playlist_id"
+    # Should have one miss (second track)
+    assert len(result["misses"]) == 1
+    assert result["misses"][0]["artist"] == "Artist 2"
+    # First track should have spotify_uri
+    assert result["blocks"][0]["tracks"][0]["spotify_uri"] == "spotify:track:123"
+
+    # Verify Spotify artifact was saved
+    spotify_file = spotify_dir / "test-playlist.json"
+    assert spotify_file.exists()
+
+
+def test_create_spotify_playlists_not_found(
+    client: TestClient, monkeypatch, tmp_path: Path
+) -> None:
+    """Test creating playlists for non-existent parsed playlist returns 404."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data" / "parsed").mkdir(parents=True)
+    (tmp_path / "data" / "spotify").mkdir(parents=True)
+
+    response = client.post("/api/spotify/non-existent/create")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+def test_create_spotify_playlists_already_exists(
+    client: TestClient,
+    monkeypatch,
+    tmp_path: Path,
+    sample_playlist_data: dict,
+    sample_spotify_artifact: dict,
+) -> None:
+    """Test creating playlists when they already exist returns 400."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    spotify_dir = tmp_path / "data" / "spotify"
+    parsed_dir.mkdir(parents=True)
+    spotify_dir.mkdir(parents=True)
+
+    # Create both parsed and spotify files (playlists already exist)
+    parsed_file = parsed_dir / "test-playlist.json"
+    parsed_file.write_text(json.dumps(sample_playlist_data))
+    spotify_file = spotify_dir / "test-playlist.json"
+    spotify_file.write_text(json.dumps(sample_spotify_artifact))
+
+    response = client.post("/api/spotify/test-playlist/create")
+    assert response.status_code == 400
+    assert "already exist" in response.json()["detail"].lower()
+
+
+def test_create_spotify_playlists_with_master(
+    client: TestClient,
+    monkeypatch,
+    tmp_path: Path,
+    sample_playlist_data: dict,
+) -> None:
+    """Test creating Spotify playlists with master playlist option."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    spotify_dir = tmp_path / "data" / "spotify"
+    parsed_dir.mkdir(parents=True)
+    spotify_dir.mkdir(parents=True)
+
+    parsed_file = parsed_dir / "test-playlist.json"
+    parsed_file.write_text(json.dumps(sample_playlist_data))
+
+    mock_client = MagicMock()
+    mock_client.search_track.return_value = {
+        "uri": "spotify:track:123",
+        "external_urls": {"spotify": "https://open.spotify.com/track/123"},
+    }
+    # Two create_playlist calls: one for block, one for master
+    mock_client.create_playlist.side_effect = [
+        {
+            "id": "block_playlist_id",
+            "name": "Test - Block 1",
+            "external_urls": {"spotify": "https://open.spotify.com/playlist/block"},
+        },
+        {
+            "id": "master_playlist_id",
+            "name": "Test - All",
+            "external_urls": {"spotify": "https://open.spotify.com/playlist/master"},
+        },
+    ]
+    mock_client.add_tracks.return_value = (2, [])
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
+
+    response = client.post(
+        "/api/spotify/test-playlist/create",
+        json={"master_playlist": True},
+    )
+    assert response.status_code == 200
+
+    result = response.json()
+    assert len(result["playlists"]) == 1
+    assert result["master_playlist"] is not None
+    assert result["master_playlist"]["id"] == "master_playlist_id"
+
+
 def test_update_spotify_playlist_name(client: TestClient, monkeypatch) -> None:
     """Test updating a Spotify playlist name (mocked, no artifact)."""
     from unittest.mock import MagicMock
