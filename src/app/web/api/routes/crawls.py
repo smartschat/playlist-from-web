@@ -139,7 +139,12 @@ def _recalculate_crawl_llm_usage(crawl: dict[str, Any]) -> None:
     total_completion = 0
     model = "gpt-5-nano"  # Default model
 
-    # Note: Link extraction cost is not tracked separately, so we sum entry costs only
+    # Include link extraction cost if stored separately
+    link_extraction = crawl.get("link_extraction_llm_usage")
+    if link_extraction:
+        total_prompt += link_extraction.get("prompt_tokens", 0)
+        total_completion += link_extraction.get("completion_tokens", 0)
+        model = link_extraction.get("model", model)
 
     # Sum costs from all processed entries
     for entry in crawl.get("processed", []):

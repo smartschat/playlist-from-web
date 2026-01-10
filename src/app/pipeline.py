@@ -588,6 +588,14 @@ def run_crawl(
             "model": crawl_result.llm_usage.model,
             "cost_usd": crawl_result.llm_usage.cost_usd,
         }
+    # Store link extraction usage separately so it's preserved on reprocess
+    if link_extraction_usage:
+        crawl_data["link_extraction_llm_usage"] = {
+            "prompt_tokens": link_extraction_usage.prompt_tokens,
+            "completion_tokens": link_extraction_usage.completion_tokens,
+            "model": link_extraction_usage.model,
+            "cost_usd": link_extraction_usage.cost_usd,
+        }
     write_json(crawl_path, crawl_data)
 
     return crawl_result
