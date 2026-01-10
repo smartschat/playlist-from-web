@@ -80,6 +80,16 @@ export async function remapPlaylist(slug: string): Promise<SpotifyArtifact> {
   });
 }
 
+export async function createSpotifyPlaylists(
+  slug: string,
+  masterPlaylist = false
+): Promise<SpotifyArtifact> {
+  return fetchJson<SpotifyArtifact>(`/spotify/${slug}/create`, {
+    method: 'POST',
+    body: JSON.stringify({ master_playlist: masterPlaylist }),
+  });
+}
+
 export async function assignTrackUri(
   slug: string,
   blockIdx: number,
