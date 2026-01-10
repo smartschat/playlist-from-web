@@ -150,7 +150,7 @@
               {#if entry.error}
                 <span class="error-text">{entry.error}</span>
               {/if}
-              {#if entry.llm_cost_usd}
+              {#if entry.llm_cost_usd !== null && entry.llm_cost_usd !== undefined}
                 <span class="entry-cost">LLM: {formatCost(entry.llm_cost_usd)}</span>
               {/if}
             </div>

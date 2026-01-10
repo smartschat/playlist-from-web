@@ -541,13 +541,15 @@ def run_crawl(
                 artifact_path = Path(f"data/spotify/{slug}.json")
                 result["artifact"] = str(artifact_path)
 
-            # Read cost from artifact if it was processed
-            if was_processed and artifact_path.exists():
+            # Read cost from artifact (always try, even if skipped - artifact may exist)
+            if artifact_path.exists():
                 try:
                     artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
                     if "llm_usage" in artifact_data:
                         url_usage = LLMUsage(**artifact_data["llm_usage"])
-                        total_usage = total_usage + url_usage
+                        # Only add to total if we actually processed (avoid double-counting)
+                        if was_processed:
+                            total_usage = total_usage + url_usage
                         result["llm_cost_usd"] = url_usage.cost_usd
                 except Exception:
                     pass  # Ignore errors reading cost
