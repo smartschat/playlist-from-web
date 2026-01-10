@@ -178,7 +178,7 @@ def create_spotify_playlists(
             detail="Spotify playlists already exist. Use sync to update or delete them first.",
         )
 
-    master_playlist = req.master_playlist if req else False
+    master_playlist = req.master_playlist if req else get_settings().master_playlist_enabled
 
     # Convert dict to ParsedPage model to reuse pipeline functions
     parsed_page = _dict_to_parsed_page(parsed)

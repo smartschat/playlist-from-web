@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.models import LLMUsage
 from app.pipeline import run_dev, run_import
 from app.utils import slugify_url, write_json
 
@@ -134,50 +133,39 @@ def reprocess_url(slug: str, idx: int, req: ReprocessRequest) -> dict[str, Any]:
 
 
 def _recalculate_crawl_llm_usage(crawl: dict[str, Any]) -> None:
-    """Recalculate total LLM usage from all processed entries and link extraction."""
+    """Recalculate total LLM usage from all processed entries and link extraction.
+
+    Sums cost_usd directly from each source to handle mixed-model crawls correctly.
+    """
     total_prompt = 0
     total_completion = 0
-    model = "gpt-5-nano"  # Default model
+    total_cost = 0.0
 
     # Include link extraction cost if stored separately
     link_extraction = crawl.get("link_extraction_llm_usage")
     if link_extraction:
         total_prompt += link_extraction.get("prompt_tokens", 0)
         total_completion += link_extraction.get("completion_tokens", 0)
-        model = link_extraction.get("model", model)
+        total_cost += link_extraction.get("cost_usd", 0.0)
 
-    # Sum costs from all processed entries
+    # Sum costs from all processed entries by reading each artifact's pre-calculated cost
     for entry in crawl.get("processed", []):
-        cost = entry.get("llm_cost_usd")
-        if cost is not None:
-            # Read full usage from artifact to get token counts
-            artifact_path = entry.get("artifact")
-            if artifact_path and Path(artifact_path).exists():
-                try:
-                    artifact_data = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
-                    if "llm_usage" in artifact_data:
-                        usage = artifact_data["llm_usage"]
-                        total_prompt += usage.get("prompt_tokens", 0)
-                        total_completion += usage.get("completion_tokens", 0)
-                        model = usage.get("model", model)
-                except Exception:
-                    pass
+        artifact_path = entry.get("artifact")
+        if artifact_path and Path(artifact_path).exists():
+            try:
+                artifact_data = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+                if "llm_usage" in artifact_data:
+                    usage = artifact_data["llm_usage"]
+                    total_prompt += usage.get("prompt_tokens", 0)
+                    total_completion += usage.get("completion_tokens", 0)
+                    total_cost += usage.get("cost_usd", 0.0)
+            except Exception:
+                pass
 
     # Update crawl's total llm_usage
-    if total_prompt > 0 or total_completion > 0:
+    if total_prompt > 0 or total_completion > 0 or total_cost > 0:
         crawl["llm_usage"] = {
             "prompt_tokens": total_prompt,
             "completion_tokens": total_completion,
-            "model": model,
-            "cost_usd": LLMUsage(
-                prompt_tokens=total_prompt,
-                completion_tokens=total_completion,
-                model=model,
-                cost_usd=0,  # Will be recalculated
-            ).cost_usd,
+            "cost_usd": total_cost,
         }
-        # Recalculate cost properly using the model's pricing
-        usage_obj = type(
-            "Usage", (), {"prompt_tokens": total_prompt, "completion_tokens": total_completion}
-        )()
-        crawl["llm_usage"]["cost_usd"] = LLMUsage.from_completion(usage_obj, model).cost_usd
