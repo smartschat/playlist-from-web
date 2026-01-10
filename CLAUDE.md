@@ -12,6 +12,10 @@ LLM-assisted CLI that scrapes public webpages, extracts track listings using Ope
 # Setup
 uv venv && uv sync
 
+# Authenticate with Spotify (one-time setup)
+uv run python -m app auth
+uv run python -m app auth --headless  # for servers without browsers
+
 # Development (no Spotify writes)
 uv run python -m app dev <url>
 
@@ -46,18 +50,21 @@ CI runs lint (Python + frontend) and tests on every push/PR to `main`.
 
 ```
 src/app/
-├── cli.py          # Typer CLI entrypoint (dev, import, replay, crawl, serve commands)
-├── config.py       # Pydantic settings from .env (OpenAI, Spotify creds)
-├── pipeline.py     # Main orchestration: fetch → parse → map → create playlists
-├── llm.py          # OpenAI integration for extracting track blocks and links
-├── pdf.py          # PDF text extraction using PyMuPDF
-├── spotify_client.py # Spotify Web API client (auth, search, playlist creation)
-├── models.py       # Pydantic models: Track, TrackBlock, ParsedPage, ExtractedLink, CrawlResult
-├── utils.py        # Helpers: slugify URLs, file I/O
-└── web/            # Web UI (FastAPI backend + Svelte frontend)
-    ├── api/        # FastAPI routes and services
-    │   └── routes/ # REST endpoints (playlists, spotify, imports, crawls)
-    └── frontend/   # Svelte 5 + Vite app
+├── cli.py            # Typer CLI entrypoint (auth, dev, import, replay, crawl, serve commands)
+├── config.py         # Pydantic settings from .env (OpenAI, Spotify creds)
+├── pipeline.py       # Main orchestration: fetch → parse → map → create playlists
+├── llm.py            # OpenAI integration for extracting track blocks and links
+├── logging_setup.py  # Logging configuration
+├── pdf.py            # PDF text extraction using PyMuPDF
+├── spotify_auth.py   # OAuth flow for Spotify authentication
+├── spotify_client.py # Spotify Web API client (search, playlist creation)
+├── models.py         # Pydantic models: Track, TrackBlock, ParsedPage, LLMUsage, ExtractedLink, CrawlResult
+├── utils.py          # Helpers: slugify URLs, file I/O
+└── web/              # Web UI (FastAPI backend + Svelte frontend)
+    ├── api/          # FastAPI routes and services
+    │   ├── routes/   # REST endpoints (playlists, spotify, imports, crawls)
+    │   └── services/ # Data access layer
+    └── frontend/     # Svelte 5 + Vite app
         ├── src/lib/        # API client, types
         ├── src/routes/     # Page components (Dashboard, PlaylistDetail, Import, CrawlList, CrawlDetail)
         └── src/components/ # Reusable components (BlockCard, TrackRow, SpotifyPanel, etc.)

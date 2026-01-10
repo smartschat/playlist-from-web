@@ -147,7 +147,9 @@ View and manage extracted playlists through a web interface:
 - Manually search and assign Spotify URIs for unmatched tracks
 - Rename or delete Spotify playlists
 - Import new URLs directly from the browser (preview before importing)
+- Create Spotify playlists directly from parsed data (no CLI needed)
 - View crawl results and retry failed URLs
+- Track LLM costs per playlist and crawl
 
 ![Web UI Dashboard](dashboard.png)
 
