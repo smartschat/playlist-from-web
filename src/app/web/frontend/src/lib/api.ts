@@ -82,11 +82,11 @@ export async function remapPlaylist(slug: string): Promise<SpotifyArtifact> {
 
 export async function createSpotifyPlaylists(
   slug: string,
-  masterPlaylist = false
+  masterPlaylist?: boolean
 ): Promise<SpotifyArtifact> {
   return fetchJson<SpotifyArtifact>(`/spotify/${slug}/create`, {
     method: 'POST',
-    body: JSON.stringify({ master_playlist: masterPlaylist }),
+    body: JSON.stringify(masterPlaylist !== undefined ? { master_playlist: masterPlaylist } : {}),
   });
 }
 

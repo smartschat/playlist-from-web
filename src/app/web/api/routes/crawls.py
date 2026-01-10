@@ -148,8 +148,10 @@ def _recalculate_crawl_llm_usage(crawl: dict[str, Any]) -> None:
         total_completion += link_extraction.get("completion_tokens", 0)
         total_cost += link_extraction.get("cost_usd", 0.0)
 
-    # Sum costs from all processed entries by reading each artifact's pre-calculated cost
+    # Sum costs from successfully processed entries only
     for entry in crawl.get("processed", []):
+        if entry.get("status") != "success":
+            continue
         artifact_path = entry.get("artifact")
         if artifact_path and Path(artifact_path).exists():
             try:
