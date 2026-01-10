@@ -286,3 +286,85 @@ def test_merge_blocks_case_insensitive() -> None:
 
     assert len(merged) == 1
     assert len(merged[0].tracks) == 2
+
+
+def test_map_tracks_to_spotify_excludes_unmatched_by_default() -> None:
+    """Test that _map_tracks_to_spotify excludes unmatched tracks by default."""
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+
+    from app.models import ParsedPage
+
+    parsed = ParsedPage(
+        source_url="https://example.com",
+        source_name="Test",
+        fetched_at=datetime.now(timezone.utc),
+        blocks=[
+            TrackBlock(
+                title="Block 1",
+                context=None,
+                tracks=[
+                    Track(artist="Artist 1", title="Song 1"),
+                    Track(artist="Artist 2", title="Song 2"),
+                ],
+            )
+        ],
+    )
+
+    mock_client = MagicMock()
+    mock_client.search_track.side_effect = [
+        {"uri": "spotify:track:1", "external_urls": {"spotify": "http://..."}},
+        None,  # Second track not found
+    ]
+
+    mapped_blocks, misses = pipeline._map_tracks_to_spotify(mock_client, parsed)
+
+    # Default: unmatched tracks are excluded from blocks
+    assert len(mapped_blocks[0]["tracks"]) == 1
+    assert mapped_blocks[0]["tracks"][0]["artist"] == "Artist 1"
+    assert len(misses) == 1
+    assert misses[0]["artist"] == "Artist 2"
+
+
+def test_map_tracks_to_spotify_keeps_unmatched_when_requested() -> None:
+    """Test that _map_tracks_to_spotify keeps unmatched tracks when keep_unmatched=True."""
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+
+    from app.models import ParsedPage
+
+    parsed = ParsedPage(
+        source_url="https://example.com",
+        source_name="Test",
+        fetched_at=datetime.now(timezone.utc),
+        blocks=[
+            TrackBlock(
+                title="Block 1",
+                context=None,
+                tracks=[
+                    Track(artist="Artist 1", title="Song 1"),
+                    Track(artist="Artist 2", title="Song 2"),
+                ],
+            )
+        ],
+    )
+
+    mock_client = MagicMock()
+    mock_client.search_track.side_effect = [
+        {"uri": "spotify:track:1", "external_urls": {"spotify": "http://..."}},
+        None,  # Second track not found
+    ]
+
+    mapped_blocks, misses = pipeline._map_tracks_to_spotify(
+        mock_client, parsed, keep_unmatched=True
+    )
+
+    # With keep_unmatched=True: unmatched tracks are kept in blocks (without URI)
+    assert len(mapped_blocks[0]["tracks"]) == 2
+    assert mapped_blocks[0]["tracks"][0]["artist"] == "Artist 1"
+    assert "spotify_uri" in mapped_blocks[0]["tracks"][0]
+    assert mapped_blocks[0]["tracks"][1]["artist"] == "Artist 2"
+    assert "spotify_uri" not in mapped_blocks[0]["tracks"][1]
+    # Misses are still tracked
+    assert len(misses) == 1
+    assert misses[0]["artist"] == "Artist 2"

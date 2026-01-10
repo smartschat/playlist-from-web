@@ -483,6 +483,10 @@ def test_remap_playlist(
     # Second track should be in misses
     assert len(result["misses"]) == 1
     assert result["misses"][0]["artist"] == "Artist 2"
+    # Remap keeps unmatched tracks in blocks (without URI) - key behavior
+    assert len(result["blocks"][0]["tracks"]) == 2
+    assert result["blocks"][0]["tracks"][1]["artist"] == "Artist 2"
+    assert "spotify_uri" not in result["blocks"][0]["tracks"][1]
 
 
 def test_create_spotify_playlists(
