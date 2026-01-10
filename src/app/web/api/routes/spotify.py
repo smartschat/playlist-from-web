@@ -5,7 +5,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.spotify_client import SpotifyClient, select_description, select_playlist_name
+from app.models import ParsedPage, Track, TrackBlock
+from app.pipeline import _create_playlists, _map_tracks_to_spotify
+from app.spotify_client import SpotifyClient
 
 from ..services.data_service import data_service
 
@@ -161,6 +163,37 @@ class CreatePlaylistsRequest(BaseModel):
     master_playlist: bool = False
 
 
+def _dict_to_parsed_page(data: dict[str, Any]) -> ParsedPage:
+    """Convert a parsed playlist dict to a ParsedPage model."""
+    fetched_at_str = data.get("fetched_at", "")
+    if fetched_at_str:
+        fetched_at = datetime.fromisoformat(fetched_at_str)
+    else:
+        fetched_at = datetime.now(timezone.utc)
+
+    return ParsedPage(
+        source_url=data.get("source_url", ""),
+        source_name=data.get("source_name"),
+        fetched_at=fetched_at,
+        blocks=[
+            TrackBlock(
+                title=b.get("title", ""),
+                context=b.get("context"),
+                tracks=[
+                    Track(
+                        artist=t["artist"],
+                        title=t["title"],
+                        album=t.get("album"),
+                        source_line=t.get("source_line"),
+                    )
+                    for t in b.get("tracks", [])
+                ],
+            )
+            for b in data.get("blocks", [])
+        ],
+    )
+
+
 @router.post("/{slug}/create")
 def create_spotify_playlists(
     slug: str, req: CreatePlaylistsRequest | None = None
@@ -184,120 +217,28 @@ def create_spotify_playlists(
 
     master_playlist = req.master_playlist if req else False
 
+    # Convert dict to ParsedPage model to reuse pipeline functions
+    parsed_page = _dict_to_parsed_page(parsed)
+
     with _get_spotify_client() as client:
-        # Map all tracks to Spotify
-        mapped_blocks: list[dict[str, Any]] = []
-        misses: list[dict[str, Any]] = []
+        # Reuse pipeline functions for mapping and playlist creation
+        mapped_blocks, misses = _map_tracks_to_spotify(client, parsed_page)
+        creation = _create_playlists(client, parsed_page, mapped_blocks, master_playlist)
 
-        for block in parsed.get("blocks", []):
-            mapped_tracks: list[dict[str, Any]] = []
-            for track in block.get("tracks", []):
-                result = client.search_track(artist=track["artist"], title=track["title"])
-                if not result:
-                    misses.append(
-                        {
-                            "block": block.get("title", ""),
-                            "artist": track["artist"],
-                            "title": track["title"],
-                        }
-                    )
-                    # Keep track without Spotify data
-                    mapped_tracks.append(
-                        {
-                            "artist": track["artist"],
-                            "title": track["title"],
-                            "album": track.get("album"),
-                            "source_line": track.get("source_line"),
-                        }
-                    )
-                else:
-                    mapped_tracks.append(
-                        {
-                            "artist": track["artist"],
-                            "title": track["title"],
-                            "album": track.get("album"),
-                            "source_line": track.get("source_line"),
-                            "spotify_uri": result["uri"],
-                            "spotify_url": result.get("external_urls", {}).get("spotify", ""),
-                        }
-                    )
-            mapped_blocks.append(
-                {
-                    "title": block.get("title", ""),
-                    "context": block.get("context"),
-                    "tracks": mapped_tracks,
-                }
-            )
+    # Build and save artifact
+    artifact = {
+        "source_url": str(parsed_page.source_url),
+        "parsed_artifact": f"data/parsed/{slug}.json",
+        "blocks": mapped_blocks,
+        "playlists": creation["playlists"],
+        "master_playlist": creation.get("master_playlist"),
+        "misses": misses,
+        "failed_tracks": creation.get("failed_tracks", []),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
-        # Create playlists on Spotify
-        source_name = parsed.get("source_name")
-        source_url = parsed.get("source_url", "")
-        fetched_at = parsed.get("fetched_at", "")
-        if fetched_at:
-            fetched_date = fetched_at[:10]
-        else:
-            fetched_date = datetime.now(timezone.utc).date().isoformat()
-
-        playlists: list[dict[str, Any]] = []
-        master_tracks: list[str] = []
-        failed_tracks: list[str] = []
-
-        for block in mapped_blocks:
-            uris = [t["spotify_uri"] for t in block["tracks"] if t.get("spotify_uri")]
-            if not uris:
-                continue
-
-            name = select_playlist_name(
-                source_name, block.get("title", ""), fetched_date, block.get("context")
-            )
-            description = select_description(source_url, block.get("context"))
-            playlist = client.create_playlist(name=name, description=description, public=False)
-            added, failed = client.add_tracks(playlist_id=playlist["id"], uris=uris)
-            if failed:
-                failed_tracks.extend(failed)
-
-            playlists.append(
-                {
-                    "id": playlist["id"],
-                    "name": playlist["name"],
-                    "url": playlist["external_urls"]["spotify"],
-                    "tracks": uris,
-                    "tracks_added": added,
-                }
-            )
-            master_tracks.extend(uris)
-
-        # Create master playlist if requested
-        master_playlist_data = None
-        if master_playlist and master_tracks:
-            name = f"{source_name or 'Imported'} – All – {fetched_date}"
-            description = select_description(source_url, "All blocks combined")
-            playlist = client.create_playlist(name=name, description=description, public=False)
-            added, failed = client.add_tracks(playlist_id=playlist["id"], uris=master_tracks)
-            if failed:
-                failed_tracks.extend(failed)
-            master_playlist_data = {
-                "id": playlist["id"],
-                "name": playlist["name"],
-                "url": playlist["external_urls"]["spotify"],
-                "tracks": master_tracks,
-                "tracks_added": added,
-            }
-
-        # Build and save artifact
-        artifact = {
-            "source_url": source_url,
-            "parsed_artifact": f"data/parsed/{slug}.json",
-            "blocks": mapped_blocks,
-            "playlists": playlists,
-            "master_playlist": master_playlist_data,
-            "misses": misses,
-            "failed_tracks": failed_tracks,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-        data_service.save_spotify_artifact(slug, artifact)
-        return artifact
+    data_service.save_spotify_artifact(slug, artifact)
+    return artifact
 
 
 @router.post("/{slug}/tracks/{block_idx}/{track_idx}/assign")
