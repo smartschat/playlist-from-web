@@ -77,6 +77,35 @@ def test_list_playlists(
     assert playlists[0]["has_spotify"] is False
 
 
+def test_list_playlists_includes_llm_cost(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
+) -> None:
+    """Test that playlist list includes LLM cost when available."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    parsed_dir.mkdir(parents=True)
+
+    # Add LLM usage to the sample data
+    playlist_with_cost = {
+        **sample_playlist_data,
+        "llm_usage": {
+            "prompt_tokens": 1000,
+            "completion_tokens": 500,
+            "model": "gpt-4",
+            "cost_usd": 0.0234,
+        },
+    }
+    playlist_file = parsed_dir / "test-playlist.json"
+    playlist_file.write_text(json.dumps(playlist_with_cost))
+
+    response = client.get("/api/playlists")
+    assert response.status_code == 200
+
+    playlists = response.json()
+    assert len(playlists) == 1
+    assert playlists[0]["llm_cost_usd"] == 0.0234
+
+
 def test_get_playlist(
     client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
 ) -> None:
@@ -95,6 +124,35 @@ def test_get_playlist(
     assert playlist["source_name"] == "Test Playlist"
     assert len(playlist["blocks"]) == 1
     assert len(playlist["blocks"][0]["tracks"]) == 2
+
+
+def test_get_playlist_includes_llm_usage(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
+) -> None:
+    """Test that getting a playlist includes LLM usage details."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    parsed_dir.mkdir(parents=True)
+
+    playlist_with_usage = {
+        **sample_playlist_data,
+        "llm_usage": {
+            "prompt_tokens": 1500,
+            "completion_tokens": 750,
+            "model": "gpt-4",
+            "cost_usd": 0.0345,
+        },
+    }
+    playlist_file = parsed_dir / "test-playlist.json"
+    playlist_file.write_text(json.dumps(playlist_with_usage))
+
+    response = client.get("/api/playlists/test-playlist")
+    assert response.status_code == 200
+
+    playlist = response.json()
+    assert "llm_usage" in playlist
+    assert playlist["llm_usage"]["cost_usd"] == 0.0345
+    assert playlist["llm_usage"]["model"] == "gpt-4"
 
 
 def test_get_playlist_not_found(client: TestClient, monkeypatch, tmp_path: Path) -> None:
@@ -865,6 +923,35 @@ def test_list_crawls(
     assert crawls[0]["link_count"] == 2
     assert crawls[0]["success_count"] == 1
     assert crawls[0]["failed_count"] == 1
+
+
+def test_list_crawls_includes_llm_cost(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_crawl_data: dict
+) -> None:
+    """Test that crawl list includes LLM cost when available."""
+    monkeypatch.chdir(tmp_path)
+    crawl_dir = tmp_path / "data" / "crawl"
+    crawl_dir.mkdir(parents=True)
+
+    # Add LLM usage to the sample crawl data
+    crawl_with_cost = {
+        **sample_crawl_data,
+        "llm_usage": {
+            "prompt_tokens": 2000,
+            "completion_tokens": 1000,
+            "model": "gpt-4",
+            "cost_usd": 0.0567,
+        },
+    }
+    crawl_file = crawl_dir / "example-com-index.json"
+    crawl_file.write_text(json.dumps(crawl_with_cost))
+
+    response = client.get("/api/crawls")
+    assert response.status_code == 200
+
+    crawls = response.json()
+    assert len(crawls) == 1
+    assert crawls[0]["llm_cost_usd"] == 0.0567
 
 
 def test_get_crawl(
