@@ -244,8 +244,19 @@ def _process_url(url: str, force: bool, settings: Settings) -> Tuple[ParsedPage,
 
 
 def _map_tracks_to_spotify(
-    client: SpotifyClient, parsed: ParsedPage
+    client: SpotifyClient, parsed: ParsedPage, keep_unmatched: bool = False
 ) -> Tuple[List[Dict], List[Dict]]:
+    """Map tracks to Spotify URIs.
+
+    Args:
+        client: Spotify client for searching
+        parsed: Parsed page with blocks and tracks
+        keep_unmatched: If True, keep unmatched tracks in blocks (without URI).
+                        If False, only include matched tracks.
+
+    Returns:
+        Tuple of (mapped_blocks, misses)
+    """
     mapped_blocks: List[Dict] = []
     misses: List[Dict] = []
     for block in parsed.blocks:
@@ -254,6 +265,15 @@ def _map_tracks_to_spotify(
             result = client.search_track(artist=track.artist, title=track.title)
             if not result:
                 misses.append({"block": block.title, "artist": track.artist, "title": track.title})
+                if keep_unmatched:
+                    mapped_tracks.append(
+                        {
+                            "artist": track.artist,
+                            "title": track.title,
+                            "album": track.album,
+                            "source_line": track.source_line,
+                        }
+                    )
                 continue
             mapped_tracks.append(
                 {
