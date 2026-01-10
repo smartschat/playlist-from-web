@@ -136,6 +136,9 @@
         <p class="meta">
           {playlist.blocks.length} block{playlist.blocks.length !== 1 ? 's' : ''} &middot;
           {getTotalTracks(playlist)} track{getTotalTracks(playlist) !== 1 ? 's' : ''}
+          {#if playlist.llm_usage}
+            &middot; LLM: ${playlist.llm_usage.cost_usd.toFixed(4)}
+          {/if}
         </p>
         {#if playlist.source_url}
           <a href={playlist.source_url} target="_blank" rel="noopener" class="source-link">

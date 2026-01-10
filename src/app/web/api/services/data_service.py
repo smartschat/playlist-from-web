@@ -37,6 +37,10 @@ class DataService:
             blocks = data.get("blocks", [])
             track_count = sum(len(b.get("tracks", [])) for b in blocks)
 
+            # Extract LLM cost if available
+            llm_usage = data.get("llm_usage")
+            llm_cost_usd = llm_usage.get("cost_usd") if llm_usage else None
+
             summary: dict[str, Any] = {
                 "slug": slug,
                 "source_url": data.get("source_url"),
@@ -45,6 +49,7 @@ class DataService:
                 "block_count": len(blocks),
                 "track_count": track_count,
                 "has_spotify": spotify_path.exists(),
+                "llm_cost_usd": llm_cost_usd,
             }
 
             if spotify_path.exists():
@@ -124,6 +129,8 @@ class DataService:
 
             slug = path.stem
             processed = data.get("processed", [])
+            llm_usage = data.get("llm_usage")
+            llm_cost_usd = llm_usage.get("cost_usd") if llm_usage else None
 
             crawls.append(
                 {
@@ -134,6 +141,7 @@ class DataService:
                     "success_count": sum(1 for p in processed if p.get("status") == "success"),
                     "skipped_count": sum(1 for p in processed if p.get("status") == "skipped"),
                     "failed_count": sum(1 for p in processed if p.get("status") == "failed"),
+                    "llm_cost_usd": llm_cost_usd,
                 }
             )
 

@@ -10,7 +10,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from .config import Settings
 from .llm import extract_links_with_llm, parse_with_llm
-from .models import CrawlResult, ExtractedLink, ParsedPage, Track, TrackBlock
+from .models import CrawlResult, ExtractedLink, LLMUsage, ParsedPage, Track, TrackBlock
 from .pdf import extract_text_from_pdf
 from .spotify_client import (
     SpotifyClient,
@@ -140,7 +140,7 @@ def _load_or_fetch_html(url: str, slug: str, force: bool) -> Tuple[str, Path]:
 
 
 def _serialize_parsed(parsed: ParsedPage) -> Dict:
-    return {
+    data = {
         "source_url": str(parsed.source_url),
         "source_name": parsed.source_name,
         "fetched_at": parsed.fetched_at.isoformat(),
@@ -161,6 +161,14 @@ def _serialize_parsed(parsed: ParsedPage) -> Dict:
             for block in parsed.blocks
         ],
     }
+    if parsed.llm_usage:
+        data["llm_usage"] = {
+            "prompt_tokens": parsed.llm_usage.prompt_tokens,
+            "completion_tokens": parsed.llm_usage.completion_tokens,
+            "model": parsed.llm_usage.model,
+            "cost_usd": parsed.llm_usage.cost_usd,
+        }
+    return data
 
 
 def _dedupe_tracks(tracks: List[Track], seen: set | None = None) -> Tuple[List[Track], set]:
@@ -228,6 +236,7 @@ def _process_url(url: str, force: bool, settings: Settings) -> Tuple[ParsedPage,
         source_name=parsed.source_name,
         fetched_at=parsed.fetched_at,
         blocks=deduped_blocks,
+        llm_usage=parsed.llm_usage,  # Preserve LLM usage
     )
     parsed_path = Path("data/parsed") / f"{slug}.json"
     write_json(parsed_path, _serialize_parsed(parsed))
@@ -280,7 +289,8 @@ def run_dev(url: str, force: bool, settings: Settings) -> bool:
 
     parsed, parsed_path = _process_url(url, force, settings)
     logger.info("Parsed %d blocks from %s. Saved to %s", len(parsed.blocks), url, parsed_path)
-    typer_msg = f"Parsed {len(parsed.blocks)} blocks. Artifact: {parsed_path}"
+    cost_str = f"${parsed.llm_usage.cost_usd:.4f}" if parsed.llm_usage else "N/A"
+    typer_msg = f"Parsed {len(parsed.blocks)} blocks. LLM cost: {cost_str}. Artifact: {parsed_path}"
     print(typer_msg)
     return True
 
@@ -369,23 +379,32 @@ def run_import(
         )
     slug = slugify_url(url)
     spotify_path = Path("data/spotify") / f"{slug}.json"
-    write_json(
-        spotify_path,
-        {
-            "source_url": url,
-            "parsed_artifact": str(parsed_path),
-            "blocks": mapped_blocks,
-            "playlists": creation["playlists"],
-            "master_playlist": creation.get("master_playlist"),
-            "misses": misses,
-            "failed_tracks": creation.get("failed_tracks", []),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "write_playlists": write_playlists,
-        },
-    )
+    spotify_data: Dict = {
+        "source_url": url,
+        "parsed_artifact": str(parsed_path),
+        "blocks": mapped_blocks,
+        "playlists": creation["playlists"],
+        "master_playlist": creation.get("master_playlist"),
+        "misses": misses,
+        "failed_tracks": creation.get("failed_tracks", []),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "write_playlists": write_playlists,
+    }
+    if parsed.llm_usage:
+        spotify_data["llm_usage"] = {
+            "prompt_tokens": parsed.llm_usage.prompt_tokens,
+            "completion_tokens": parsed.llm_usage.completion_tokens,
+            "model": parsed.llm_usage.model,
+            "cost_usd": parsed.llm_usage.cost_usd,
+        }
+    write_json(spotify_path, spotify_data)
     action = "Mapped (no write)" if not write_playlists else "Created"
     n_playlists = len(creation["playlists"])
-    print(f"{action} {n_playlists} playlists. Misses: {len(misses)}. Artifact: {spotify_path}")
+    cost_str = f"${parsed.llm_usage.cost_usd:.4f}" if parsed.llm_usage else "N/A"
+    print(
+        f"{action} {n_playlists} playlists. Misses: {len(misses)}. "
+        f"LLM cost: {cost_str}. Artifact: {spotify_path}"
+    )
     return True
 
 
@@ -441,14 +460,16 @@ def run_replay(parsed: Path, master_playlist: bool, settings: Settings) -> None:
     print(f"[replay] Created {n_playlists} playlists. Misses: {n_misses}. Artifact: {spotify_path}")
 
 
-def _extract_links_from_index(url: str, force: bool, settings: Settings) -> List[ExtractedLink]:
+def _extract_links_from_index(
+    url: str, force: bool, settings: Settings
+) -> Tuple[List[ExtractedLink], LLMUsage]:
     """Fetch index page and extract playlist-related links using LLM."""
     slug = slugify_url(url)
     html, raw_path = _load_or_fetch_html(url, slug, force)
     # Use link-preserving extraction for crawling
     links_content = _extract_links_from_html(html)
 
-    links = extract_links_with_llm(
+    links, llm_usage = extract_links_with_llm(
         url=url,
         content=links_content,
         model=settings.openai_model,
@@ -456,7 +477,7 @@ def _extract_links_from_index(url: str, force: bool, settings: Settings) -> List
     )
 
     logger.info("Extracted %d links from index %s", len(links), url)
-    return links
+    return links, llm_usage
 
 
 def run_crawl(
@@ -484,12 +505,13 @@ def run_crawl(
         CrawlResult with summary of all processed URLs.
     """
     # Extract links from index page
-    links = _extract_links_from_index(index_url, force, settings)
+    links, link_extraction_usage = _extract_links_from_index(index_url, force, settings)
 
     if max_links is not None:
         links = links[:max_links]
 
     processed: List[Dict] = []
+    total_usage = link_extraction_usage  # Start with link extraction cost
 
     for i, link in enumerate(links, 1):
         result: Dict = {"url": link.url, "description": link.description}
@@ -510,12 +532,27 @@ def run_crawl(
                 result["status"] = "success" if was_processed else "skipped"
                 result["mode"] = "import"
 
-            # Add artifact path
+            # Add artifact path and aggregate cost
             slug = slugify_url(link.url)
             if dev_mode:
-                result["artifact"] = f"data/parsed/{slug}.json"
+                artifact_path = Path(f"data/parsed/{slug}.json")
+                result["artifact"] = str(artifact_path)
             else:
-                result["artifact"] = f"data/spotify/{slug}.json"
+                artifact_path = Path(f"data/spotify/{slug}.json")
+                result["artifact"] = str(artifact_path)
+
+            # Read cost from artifact (always try, even if skipped - artifact may exist)
+            if artifact_path.exists():
+                try:
+                    artifact_data = json.loads(artifact_path.read_text(encoding="utf-8"))
+                    if "llm_usage" in artifact_data:
+                        url_usage = LLMUsage(**artifact_data["llm_usage"])
+                        # Only add to total if we actually processed (avoid double-counting)
+                        if was_processed:
+                            total_usage = total_usage + url_usage
+                        result["llm_cost_usd"] = url_usage.cost_usd
+                except Exception:
+                    pass  # Ignore errors reading cost
 
         except Exception as exc:
             logger.error("Failed to process %s: %s", link.url, exc)
@@ -530,21 +567,35 @@ def run_crawl(
         discovered_links=links,
         processed=processed,
         crawled_at=datetime.now(timezone.utc),
+        llm_usage=total_usage,
     )
 
     index_slug = slugify_url(index_url)
     crawl_path = Path("data/crawl") / f"{index_slug}.json"
-    write_json(
-        crawl_path,
-        {
-            "index_url": str(crawl_result.index_url),
-            "discovered_links": [
-                {"url": link.url, "description": link.description}
-                for link in crawl_result.discovered_links
-            ],
-            "processed": crawl_result.processed,
-            "crawled_at": crawl_result.crawled_at.isoformat(),
-        },
-    )
+    crawl_data: Dict = {
+        "index_url": str(crawl_result.index_url),
+        "discovered_links": [
+            {"url": link.url, "description": link.description}
+            for link in crawl_result.discovered_links
+        ],
+        "processed": crawl_result.processed,
+        "crawled_at": crawl_result.crawled_at.isoformat(),
+    }
+    if crawl_result.llm_usage:
+        crawl_data["llm_usage"] = {
+            "prompt_tokens": crawl_result.llm_usage.prompt_tokens,
+            "completion_tokens": crawl_result.llm_usage.completion_tokens,
+            "model": crawl_result.llm_usage.model,
+            "cost_usd": crawl_result.llm_usage.cost_usd,
+        }
+    # Store link extraction usage separately so it's preserved on reprocess
+    if link_extraction_usage:
+        crawl_data["link_extraction_llm_usage"] = {
+            "prompt_tokens": link_extraction_usage.prompt_tokens,
+            "completion_tokens": link_extraction_usage.completion_tokens,
+            "model": link_extraction_usage.model,
+            "cost_usd": link_extraction_usage.cost_usd,
+        }
+    write_json(crawl_path, crawl_data)
 
     return crawl_result

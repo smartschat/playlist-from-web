@@ -320,6 +320,8 @@ def crawl(
         typer.echo(
             f"  Processed: {success_count} new, {skipped_count} skipped, {fail_count} failed."
         )
+        if result.llm_usage:
+            typer.echo(f"  Total LLM cost: ${result.llm_usage.cost_usd:.4f}")
 
         index_slug = slugify_url(index_url)
         typer.echo(f"  Summary artifact: data/crawl/{index_slug}.json")
