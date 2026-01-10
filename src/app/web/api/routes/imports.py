@@ -28,6 +28,7 @@ class ImportPreviewResponse(BaseModel):
     block_count: int
     track_count: int
     blocks: list[dict[str, Any]]
+    llm_cost_usd: float | None = None
 
 
 class ImportExecuteResponse(BaseModel):
@@ -38,6 +39,7 @@ class ImportExecuteResponse(BaseModel):
     playlist_count: int
     miss_count: int
     has_master: bool
+    llm_cost_usd: float | None = None
 
 
 @router.post("/preview", response_model=ImportPreviewResponse)
@@ -62,6 +64,8 @@ def preview_import(req: ImportRequest) -> dict[str, Any]:
 
     blocks = parsed.get("blocks", [])
     track_count = sum(len(b.get("tracks", [])) for b in blocks)
+    llm_usage = parsed.get("llm_usage")
+    llm_cost_usd = llm_usage.get("cost_usd") if llm_usage else None
 
     return {
         "slug": slug,
@@ -70,6 +74,7 @@ def preview_import(req: ImportRequest) -> dict[str, Any]:
         "block_count": len(blocks),
         "track_count": track_count,
         "blocks": blocks,
+        "llm_cost_usd": llm_cost_usd,
     }
 
 
@@ -97,10 +102,14 @@ def execute_import(req: ImportRequest) -> dict[str, Any]:
     if artifact is None:
         raise HTTPException(status_code=500, detail="Import succeeded but artifact not found")
 
+    llm_usage = artifact.get("llm_usage")
+    llm_cost_usd = llm_usage.get("cost_usd") if llm_usage else None
+
     return {
         "slug": slug,
         "source_url": req.url,
         "playlist_count": len(artifact.get("playlists", [])),
         "miss_count": len(artifact.get("misses", [])),
         "has_master": artifact.get("master_playlist") is not None,
+        "llm_cost_usd": llm_cost_usd,
     }

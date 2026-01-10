@@ -32,6 +32,11 @@
     const date = new Date(dateStr);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
+
+  function formatCost(cost: number | null): string {
+    if (cost === null) return '-';
+    return `$${cost.toFixed(4)}`;
+  }
 </script>
 
 <div class="dashboard">
@@ -102,7 +107,12 @@
           </div>
 
           <footer>
-            <time>{formatDate(playlist.fetched_at)}</time>
+            <div class="footer-meta">
+              <time>{formatDate(playlist.fetched_at)}</time>
+              {#if playlist.llm_cost_usd !== null}
+                <span class="cost">LLM: {formatCost(playlist.llm_cost_usd)}</span>
+              {/if}
+            </div>
             <a href="#/playlist/{playlist.slug}" class="btn">View</a>
           </footer>
         </article>
@@ -314,9 +324,20 @@
     border-top: 1px solid #f3f4f6;
   }
 
+  .footer-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
   .playlist-card time {
     font-size: 0.8125rem;
     color: #9ca3af;
+  }
+
+  .cost {
+    font-size: 0.75rem;
+    color: #6b7280;
   }
 
   .btn {

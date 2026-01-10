@@ -77,6 +77,35 @@ def test_list_playlists(
     assert playlists[0]["has_spotify"] is False
 
 
+def test_list_playlists_includes_llm_cost(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
+) -> None:
+    """Test that playlist list includes LLM cost when available."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    parsed_dir.mkdir(parents=True)
+
+    # Add LLM usage to the sample data
+    playlist_with_cost = {
+        **sample_playlist_data,
+        "llm_usage": {
+            "prompt_tokens": 1000,
+            "completion_tokens": 500,
+            "model": "gpt-4",
+            "cost_usd": 0.0234,
+        },
+    }
+    playlist_file = parsed_dir / "test-playlist.json"
+    playlist_file.write_text(json.dumps(playlist_with_cost))
+
+    response = client.get("/api/playlists")
+    assert response.status_code == 200
+
+    playlists = response.json()
+    assert len(playlists) == 1
+    assert playlists[0]["llm_cost_usd"] == 0.0234
+
+
 def test_get_playlist(
     client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
 ) -> None:
@@ -95,6 +124,35 @@ def test_get_playlist(
     assert playlist["source_name"] == "Test Playlist"
     assert len(playlist["blocks"]) == 1
     assert len(playlist["blocks"][0]["tracks"]) == 2
+
+
+def test_get_playlist_includes_llm_usage(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_playlist_data: dict
+) -> None:
+    """Test that getting a playlist includes LLM usage details."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    parsed_dir.mkdir(parents=True)
+
+    playlist_with_usage = {
+        **sample_playlist_data,
+        "llm_usage": {
+            "prompt_tokens": 1500,
+            "completion_tokens": 750,
+            "model": "gpt-4",
+            "cost_usd": 0.0345,
+        },
+    }
+    playlist_file = parsed_dir / "test-playlist.json"
+    playlist_file.write_text(json.dumps(playlist_with_usage))
+
+    response = client.get("/api/playlists/test-playlist")
+    assert response.status_code == 200
+
+    playlist = response.json()
+    assert "llm_usage" in playlist
+    assert playlist["llm_usage"]["cost_usd"] == 0.0345
+    assert playlist["llm_usage"]["model"] == "gpt-4"
 
 
 def test_get_playlist_not_found(client: TestClient, monkeypatch, tmp_path: Path) -> None:
@@ -425,6 +483,167 @@ def test_remap_playlist(
     # Second track should be in misses
     assert len(result["misses"]) == 1
     assert result["misses"][0]["artist"] == "Artist 2"
+    # Remap keeps unmatched tracks in blocks (without URI) - key behavior
+    assert len(result["blocks"][0]["tracks"]) == 2
+    assert result["blocks"][0]["tracks"][1]["artist"] == "Artist 2"
+    assert "spotify_uri" not in result["blocks"][0]["tracks"][1]
+
+
+def test_create_spotify_playlists(
+    client: TestClient,
+    monkeypatch,
+    tmp_path: Path,
+    sample_playlist_data: dict,
+) -> None:
+    """Test creating Spotify playlists from a parsed playlist."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    spotify_dir = tmp_path / "data" / "spotify"
+    parsed_dir.mkdir(parents=True)
+    spotify_dir.mkdir(parents=True)
+
+    # Create only parsed file (no spotify artifact yet)
+    parsed_file = parsed_dir / "test-playlist.json"
+    parsed_file.write_text(json.dumps(sample_playlist_data))
+
+    # Mock the SpotifyClient
+    mock_client = MagicMock()
+    mock_client.search_track.side_effect = [
+        # First track matches
+        {
+            "uri": "spotify:track:123",
+            "external_urls": {"spotify": "https://open.spotify.com/track/123"},
+        },
+        # Second track doesn't match
+        None,
+    ]
+    mock_client.create_playlist.return_value = {
+        "id": "new_playlist_id",
+        "name": "Test Playlist - Block 1 - 2025-01-01",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/new_playlist_id"},
+    }
+    mock_client.add_tracks.return_value = (1, [])  # 1 added, 0 failed
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
+
+    response = client.post("/api/spotify/test-playlist/create")
+    assert response.status_code == 200
+
+    result = response.json()
+    # Should have created one playlist
+    assert len(result["playlists"]) == 1
+    assert result["playlists"][0]["id"] == "new_playlist_id"
+    # Should have one miss (second track)
+    assert len(result["misses"]) == 1
+    assert result["misses"][0]["artist"] == "Artist 2"
+    # First track should have spotify_uri
+    assert result["blocks"][0]["tracks"][0]["spotify_uri"] == "spotify:track:123"
+
+    # Verify Spotify artifact was saved
+    spotify_file = spotify_dir / "test-playlist.json"
+    assert spotify_file.exists()
+
+
+def test_create_spotify_playlists_not_found(
+    client: TestClient, monkeypatch, tmp_path: Path
+) -> None:
+    """Test creating playlists for non-existent parsed playlist returns 404."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data" / "parsed").mkdir(parents=True)
+    (tmp_path / "data" / "spotify").mkdir(parents=True)
+
+    response = client.post("/api/spotify/non-existent/create")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+def test_create_spotify_playlists_already_exists(
+    client: TestClient,
+    monkeypatch,
+    tmp_path: Path,
+    sample_playlist_data: dict,
+    sample_spotify_artifact: dict,
+) -> None:
+    """Test creating playlists when they already exist returns 400."""
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    spotify_dir = tmp_path / "data" / "spotify"
+    parsed_dir.mkdir(parents=True)
+    spotify_dir.mkdir(parents=True)
+
+    # Create both parsed and spotify files (playlists already exist)
+    parsed_file = parsed_dir / "test-playlist.json"
+    parsed_file.write_text(json.dumps(sample_playlist_data))
+    spotify_file = spotify_dir / "test-playlist.json"
+    spotify_file.write_text(json.dumps(sample_spotify_artifact))
+
+    response = client.post("/api/spotify/test-playlist/create")
+    assert response.status_code == 400
+    assert "already exist" in response.json()["detail"].lower()
+
+
+def test_create_spotify_playlists_with_master(
+    client: TestClient,
+    monkeypatch,
+    tmp_path: Path,
+    sample_playlist_data: dict,
+) -> None:
+    """Test creating Spotify playlists with master playlist option."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    parsed_dir = tmp_path / "data" / "parsed"
+    spotify_dir = tmp_path / "data" / "spotify"
+    parsed_dir.mkdir(parents=True)
+    spotify_dir.mkdir(parents=True)
+
+    parsed_file = parsed_dir / "test-playlist.json"
+    parsed_file.write_text(json.dumps(sample_playlist_data))
+
+    mock_client = MagicMock()
+    mock_client.search_track.return_value = {
+        "uri": "spotify:track:123",
+        "external_urls": {"spotify": "https://open.spotify.com/track/123"},
+    }
+    # Two create_playlist calls: one for block, one for master
+    mock_client.create_playlist.side_effect = [
+        {
+            "id": "block_playlist_id",
+            "name": "Test - Block 1",
+            "external_urls": {"spotify": "https://open.spotify.com/playlist/block"},
+        },
+        {
+            "id": "master_playlist_id",
+            "name": "Test - All",
+            "external_urls": {"spotify": "https://open.spotify.com/playlist/master"},
+        },
+    ]
+    mock_client.add_tracks.return_value = (2, [])
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    def mock_get_client():
+        return mock_client
+
+    monkeypatch.setattr("app.web.api.routes.spotify._get_spotify_client", mock_get_client)
+
+    response = client.post(
+        "/api/spotify/test-playlist/create",
+        json={"master_playlist": True},
+    )
+    assert response.status_code == 200
+
+    result = response.json()
+    assert len(result["playlists"]) == 1
+    assert result["master_playlist"] is not None
+    assert result["master_playlist"]["id"] == "master_playlist_id"
 
 
 def test_update_spotify_playlist_name(client: TestClient, monkeypatch) -> None:
@@ -708,6 +927,35 @@ def test_list_crawls(
     assert crawls[0]["link_count"] == 2
     assert crawls[0]["success_count"] == 1
     assert crawls[0]["failed_count"] == 1
+
+
+def test_list_crawls_includes_llm_cost(
+    client: TestClient, monkeypatch, tmp_path: Path, sample_crawl_data: dict
+) -> None:
+    """Test that crawl list includes LLM cost when available."""
+    monkeypatch.chdir(tmp_path)
+    crawl_dir = tmp_path / "data" / "crawl"
+    crawl_dir.mkdir(parents=True)
+
+    # Add LLM usage to the sample crawl data
+    crawl_with_cost = {
+        **sample_crawl_data,
+        "llm_usage": {
+            "prompt_tokens": 2000,
+            "completion_tokens": 1000,
+            "model": "gpt-4",
+            "cost_usd": 0.0567,
+        },
+    }
+    crawl_file = crawl_dir / "example-com-index.json"
+    crawl_file.write_text(json.dumps(crawl_with_cost))
+
+    response = client.get("/api/crawls")
+    assert response.status_code == 200
+
+    crawls = response.json()
+    assert len(crawls) == 1
+    assert crawls[0]["llm_cost_usd"] == 0.0567
 
 
 def test_get_crawl(

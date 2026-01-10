@@ -18,6 +18,7 @@ class PlaylistSummary(BaseModel):
     has_spotify: bool
     miss_count: int | None = None
     playlist_count: int | None = None
+    llm_cost_usd: float | None = None
 
 
 class PlaylistUpdate(BaseModel):

@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.models import ParsedPage, Track, TrackBlock
+from app.pipeline import _create_playlists, _map_tracks_to_spotify
 from app.spotify_client import SpotifyClient
 
 from ..services.data_service import data_service
@@ -96,65 +98,110 @@ def remap_playlist(slug: str) -> dict[str, Any]:
     if parsed is None:
         raise HTTPException(status_code=404, detail=f"Playlist not found: {slug}")
 
+    # Convert dict to ParsedPage model to reuse pipeline function
+    parsed_page = _dict_to_parsed_page(parsed)
+
     with _get_spotify_client() as client:
-        mapped_blocks: list[dict[str, Any]] = []
-        misses: list[dict[str, Any]] = []
+        # Use keep_unmatched=True to preserve all tracks for remapping
+        mapped_blocks, misses = _map_tracks_to_spotify(client, parsed_page, keep_unmatched=True)
 
-        for block in parsed.get("blocks", []):
-            mapped_tracks: list[dict[str, Any]] = []
-            for track in block.get("tracks", []):
-                result = client.search_track(artist=track["artist"], title=track["title"])
-                if not result:
-                    misses.append(
-                        {
-                            "block": block.get("title", ""),
-                            "artist": track["artist"],
-                            "title": track["title"],
-                        }
+    # Get existing artifact to preserve playlists
+    existing = data_service.get_spotify_artifact(slug)
+    artifact = {
+        "source_url": str(parsed_page.source_url),
+        "parsed_artifact": f"data/parsed/{slug}.json",
+        "blocks": mapped_blocks,
+        "playlists": existing.get("playlists", []) if existing else [],
+        "master_playlist": existing.get("master_playlist") if existing else None,
+        "misses": misses,
+        "failed_tracks": [],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    data_service.save_spotify_artifact(slug, artifact)
+    return artifact
+
+
+class CreatePlaylistsRequest(BaseModel):
+    master_playlist: bool = False
+
+
+def _dict_to_parsed_page(data: dict[str, Any]) -> ParsedPage:
+    """Convert a parsed playlist dict to a ParsedPage model."""
+    fetched_at_str = data.get("fetched_at", "")
+    if fetched_at_str:
+        fetched_at = datetime.fromisoformat(fetched_at_str)
+    else:
+        fetched_at = datetime.now(timezone.utc)
+
+    return ParsedPage(
+        source_url=data.get("source_url", ""),
+        source_name=data.get("source_name"),
+        fetched_at=fetched_at,
+        blocks=[
+            TrackBlock(
+                title=b.get("title", ""),
+                context=b.get("context"),
+                tracks=[
+                    Track(
+                        artist=t["artist"],
+                        title=t["title"],
+                        album=t.get("album"),
+                        source_line=t.get("source_line"),
                     )
-                    # Keep track without Spotify data
-                    mapped_tracks.append(
-                        {
-                            "artist": track["artist"],
-                            "title": track["title"],
-                            "album": track.get("album"),
-                            "source_line": track.get("source_line"),
-                        }
-                    )
-                else:
-                    mapped_tracks.append(
-                        {
-                            "artist": track["artist"],
-                            "title": track["title"],
-                            "album": track.get("album"),
-                            "source_line": track.get("source_line"),
-                            "spotify_uri": result["uri"],
-                            "spotify_url": result.get("external_urls", {}).get("spotify", ""),
-                        }
-                    )
-            mapped_blocks.append(
-                {
-                    "title": block.get("title", ""),
-                    "context": block.get("context"),
-                    "tracks": mapped_tracks,
-                }
+                    for t in b.get("tracks", [])
+                ],
             )
+            for b in data.get("blocks", [])
+        ],
+    )
 
-        # Get existing artifact to preserve playlists
-        existing = data_service.get_spotify_artifact(slug)
-        artifact = {
-            "source_url": parsed.get("source_url", ""),
-            "parsed_artifact": f"data/parsed/{slug}.json",
-            "blocks": mapped_blocks,
-            "playlists": existing.get("playlists", []) if existing else [],
-            "master_playlist": existing.get("master_playlist") if existing else None,
-            "misses": misses,
-            "failed_tracks": [],
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
 
-        data_service.save_spotify_artifact(slug, artifact)
-        return artifact
+@router.post("/{slug}/create")
+def create_spotify_playlists(
+    slug: str, req: CreatePlaylistsRequest | None = None
+) -> dict[str, Any]:
+    """Create Spotify playlists from a parsed playlist.
+
+    This endpoint maps all tracks to Spotify and creates the actual playlists.
+    Use this after editing a parsed playlist to push it to Spotify.
+    """
+    parsed = data_service.get_parsed_playlist(slug)
+    if parsed is None:
+        raise HTTPException(status_code=404, detail=f"Playlist not found: {slug}")
+
+    # Check if Spotify artifact already exists with playlists
+    existing = data_service.get_spotify_artifact(slug)
+    if existing and existing.get("playlists"):
+        raise HTTPException(
+            status_code=400,
+            detail="Spotify playlists already exist. Use sync to update or delete them first.",
+        )
+
+    master_playlist = req.master_playlist if req else get_settings().master_playlist_enabled
+
+    # Convert dict to ParsedPage model to reuse pipeline functions
+    parsed_page = _dict_to_parsed_page(parsed)
+
+    with _get_spotify_client() as client:
+        # Reuse pipeline functions for mapping and playlist creation
+        mapped_blocks, misses = _map_tracks_to_spotify(client, parsed_page)
+        creation = _create_playlists(client, parsed_page, mapped_blocks, master_playlist)
+
+    # Build and save artifact
+    artifact = {
+        "source_url": str(parsed_page.source_url),
+        "parsed_artifact": f"data/parsed/{slug}.json",
+        "blocks": mapped_blocks,
+        "playlists": creation["playlists"],
+        "master_playlist": creation.get("master_playlist"),
+        "misses": misses,
+        "failed_tracks": creation.get("failed_tracks", []),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    data_service.save_spotify_artifact(slug, artifact)
+    return artifact
 
 
 @router.post("/{slug}/tracks/{block_idx}/{track_idx}/assign")

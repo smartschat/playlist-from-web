@@ -130,6 +130,12 @@
           <span class="value">{previewResult.track_count}</span>
           <span class="label">track{previewResult.track_count !== 1 ? 's' : ''}</span>
         </div>
+        {#if previewResult.llm_cost_usd !== null}
+          <div class="stat">
+            <span class="value cost">${previewResult.llm_cost_usd.toFixed(4)}</span>
+            <span class="label">LLM cost</span>
+          </div>
+        {/if}
       </div>
 
       {#if previewResult.source_name}
@@ -180,6 +186,12 @@
           <span class="value {importResult.miss_count > 0 ? 'warn' : ''}">{importResult.miss_count}</span>
           <span class="label">miss{importResult.miss_count !== 1 ? 'es' : ''}</span>
         </div>
+        {#if importResult.llm_cost_usd !== null}
+          <div class="stat">
+            <span class="value cost">${importResult.llm_cost_usd.toFixed(4)}</span>
+            <span class="label">LLM cost</span>
+          </div>
+        {/if}
         {#if importResult.has_master}
           <div class="stat">
             <span class="value">1</span>

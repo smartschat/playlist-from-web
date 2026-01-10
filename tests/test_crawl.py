@@ -6,7 +6,12 @@ import pytest
 
 from app import pipeline
 from app.config import Settings
-from app.models import ExtractedLink, Track, TrackBlock
+from app.models import ExtractedLink, LLMUsage, Track, TrackBlock
+
+
+def _mock_llm_usage() -> LLMUsage:
+    """Create a mock LLMUsage for tests."""
+    return LLMUsage(prompt_tokens=100, completion_tokens=50, model="gpt-5-nano", cost_usd=0.0001)
 
 
 @pytest.fixture
@@ -59,22 +64,24 @@ def test_extract_links_from_index(monkeypatch, tmp_path: Path, settings: Setting
 
     # Mock LLM extraction
     def fake_extract_links(url, content, model, api_key):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/playlist/2024-01-01.pdf", description="January"),
             ExtractedLink(
                 url="https://example.com/playlist/2024-02-01.pdf", description="February"
             ),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "extract_links_with_llm", fake_extract_links)
 
-    links = pipeline._extract_links_from_index(
+    links, llm_usage = pipeline._extract_links_from_index(
         "https://example.com/index", force=True, settings=settings
     )
 
     assert len(links) == 2
     assert links[0].url == "https://example.com/playlist/2024-01-01.pdf"
     assert links[1].url == "https://example.com/playlist/2024-02-01.pdf"
+    assert llm_usage is not None
 
 
 def test_run_crawl_dev_mode(monkeypatch, tmp_path: Path, settings: Settings) -> None:
@@ -86,10 +93,11 @@ def test_run_crawl_dev_mode(monkeypatch, tmp_path: Path, settings: Settings) -> 
 
     # Mock link extraction
     def fake_extract(url, force, settings):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/page1", description="Page 1"),
             ExtractedLink(url="https://example.com/page2", description="Page 2"),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
 
@@ -123,11 +131,12 @@ def test_run_crawl_max_links(monkeypatch, tmp_path: Path, settings: Settings) ->
     (tmp_path / "data" / "crawl").mkdir(parents=True)
 
     def fake_extract(url, force, settings):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/page1", description="Page 1"),
             ExtractedLink(url="https://example.com/page2", description="Page 2"),
             ExtractedLink(url="https://example.com/page3", description="Page 3"),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
 
@@ -158,10 +167,11 @@ def test_run_crawl_continues_on_error(monkeypatch, tmp_path: Path, settings: Set
     (tmp_path / "data" / "crawl").mkdir(parents=True)
 
     def fake_extract(url, force, settings):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/fail", description="Will fail"),
             ExtractedLink(url="https://example.com/success", description="Will succeed"),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
 
@@ -196,7 +206,8 @@ def test_crawl_result_saved(monkeypatch, tmp_path: Path, settings: Settings) -> 
     crawl_dir.mkdir(parents=True)
 
     def fake_extract(url, force, settings):
-        return [ExtractedLink(url="https://example.com/page1", description="Page 1")]
+        links = [ExtractedLink(url="https://example.com/page1", description="Page 1")]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
     monkeypatch.setattr(pipeline, "run_dev", lambda *args, **kwargs: True)
@@ -275,3 +286,85 @@ def test_merge_blocks_case_insensitive() -> None:
 
     assert len(merged) == 1
     assert len(merged[0].tracks) == 2
+
+
+def test_map_tracks_to_spotify_excludes_unmatched_by_default() -> None:
+    """Test that _map_tracks_to_spotify excludes unmatched tracks by default."""
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+
+    from app.models import ParsedPage
+
+    parsed = ParsedPage(
+        source_url="https://example.com",
+        source_name="Test",
+        fetched_at=datetime.now(timezone.utc),
+        blocks=[
+            TrackBlock(
+                title="Block 1",
+                context=None,
+                tracks=[
+                    Track(artist="Artist 1", title="Song 1"),
+                    Track(artist="Artist 2", title="Song 2"),
+                ],
+            )
+        ],
+    )
+
+    mock_client = MagicMock()
+    mock_client.search_track.side_effect = [
+        {"uri": "spotify:track:1", "external_urls": {"spotify": "http://..."}},
+        None,  # Second track not found
+    ]
+
+    mapped_blocks, misses = pipeline._map_tracks_to_spotify(mock_client, parsed)
+
+    # Default: unmatched tracks are excluded from blocks
+    assert len(mapped_blocks[0]["tracks"]) == 1
+    assert mapped_blocks[0]["tracks"][0]["artist"] == "Artist 1"
+    assert len(misses) == 1
+    assert misses[0]["artist"] == "Artist 2"
+
+
+def test_map_tracks_to_spotify_keeps_unmatched_when_requested() -> None:
+    """Test that _map_tracks_to_spotify keeps unmatched tracks when keep_unmatched=True."""
+    from datetime import datetime, timezone
+    from unittest.mock import MagicMock
+
+    from app.models import ParsedPage
+
+    parsed = ParsedPage(
+        source_url="https://example.com",
+        source_name="Test",
+        fetched_at=datetime.now(timezone.utc),
+        blocks=[
+            TrackBlock(
+                title="Block 1",
+                context=None,
+                tracks=[
+                    Track(artist="Artist 1", title="Song 1"),
+                    Track(artist="Artist 2", title="Song 2"),
+                ],
+            )
+        ],
+    )
+
+    mock_client = MagicMock()
+    mock_client.search_track.side_effect = [
+        {"uri": "spotify:track:1", "external_urls": {"spotify": "http://..."}},
+        None,  # Second track not found
+    ]
+
+    mapped_blocks, misses = pipeline._map_tracks_to_spotify(
+        mock_client, parsed, keep_unmatched=True
+    )
+
+    # With keep_unmatched=True: unmatched tracks are kept in blocks (without URI)
+    assert len(mapped_blocks[0]["tracks"]) == 2
+    assert mapped_blocks[0]["tracks"][0]["artist"] == "Artist 1"
+    assert "spotify_uri" in mapped_blocks[0]["tracks"][0]
+    assert mapped_blocks[0]["tracks"][1]["artist"] == "Artist 2"
+    assert "spotify_uri" not in mapped_blocks[0]["tracks"][1]
+    # Misses are still tracked
+    assert len(misses) == 1
+    assert misses[0]["artist"] == "Artist 2"

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getPlaylist, updatePlaylist, getSpotifyArtifact } from '../lib/api';
+  import { getPlaylist, updatePlaylist, getSpotifyArtifact, createSpotifyPlaylists } from '../lib/api';
   import type { ParsedPlaylist, TrackBlock, SpotifyArtifact } from '../lib/types';
   import BlockCard from '../components/BlockCard.svelte';
   import SpotifyPanel from '../components/SpotifyPanel.svelte';
@@ -14,6 +14,7 @@
   let editMode = false;
   let saving = false;
   let hasChanges = false;
+  let creatingSpotify = false;
 
   // Keep a copy of the original for comparison
   let originalPlaylist: ParsedPlaylist | null = null;
@@ -111,6 +112,22 @@
     }
   }
 
+  async function handleCreateSpotify() {
+    if (creatingSpotify) return;
+
+    creatingSpotify = true;
+    error = null;
+
+    try {
+      const artifact = await createSpotifyPlaylists(slug);
+      spotifyArtifact = artifact;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to create Spotify playlists';
+    } finally {
+      creatingSpotify = false;
+    }
+  }
+
   function handleSpotifyUpdate(e: CustomEvent<SpotifyArtifact>) {
     spotifyArtifact = e.detail;
   }
@@ -136,6 +153,9 @@
         <p class="meta">
           {playlist.blocks.length} block{playlist.blocks.length !== 1 ? 's' : ''} &middot;
           {getTotalTracks(playlist)} track{getTotalTracks(playlist) !== 1 ? 's' : ''}
+          {#if playlist.llm_usage}
+            &middot; LLM: ${playlist.llm_usage.cost_usd.toFixed(4)}
+          {/if}
         </p>
         {#if playlist.source_url}
           <a href={playlist.source_url} target="_blank" rel="noopener" class="source-link">
@@ -191,8 +211,15 @@
         <SpotifyPanel {slug} artifact={spotifyArtifact} on:update={handleSpotifyUpdate} />
       {:else}
         <div class="no-spotify">
-          <p>No Spotify data available for this playlist.</p>
-          <p class="hint">Import this playlist to Spotify using the CLI to enable Spotify integration.</p>
+          <p>No Spotify playlists created yet.</p>
+          <button
+            class="btn btn-spotify"
+            on:click={handleCreateSpotify}
+            disabled={creatingSpotify}
+          >
+            {creatingSpotify ? 'Creating...' : 'Create on Spotify'}
+          </button>
+          <p class="hint">This will search for all tracks and create playlists on your Spotify account.</p>
         </div>
       {/if}
     </section>
@@ -314,6 +341,20 @@
   }
 
   .btn-primary:hover:not(:disabled) {
+    background: #1aa34a;
+    transform: scale(1.02);
+  }
+
+  .btn-spotify {
+    background: #1db954;
+    border: none;
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    margin: 1rem 0;
+  }
+
+  .btn-spotify:hover:not(:disabled) {
     background: #1aa34a;
     transform: scale(1.02);
   }
