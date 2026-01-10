@@ -22,6 +22,7 @@ class CrawlSummary(BaseModel):
     success_count: int
     skipped_count: int
     failed_count: int
+    llm_cost_usd: float | None = None
 
 
 class ReprocessRequest(BaseModel):

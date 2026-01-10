@@ -28,6 +28,11 @@
     if (crawl.success_count > 0) return 'success';
     return '';
   }
+
+  function formatCost(cost: number | null): string {
+    if (cost === null) return '-';
+    return `$${cost.toFixed(4)}`;
+  }
 </script>
 
 <div class="crawl-list-page">
@@ -78,7 +83,12 @@
           </div>
 
           <footer>
-            <time>{formatDate(crawl.crawled_at)}</time>
+            <div class="footer-meta">
+              <time>{formatDate(crawl.crawled_at)}</time>
+              {#if crawl.llm_cost_usd !== null}
+                <span class="cost">LLM: {formatCost(crawl.llm_cost_usd)}</span>
+              {/if}
+            </div>
             <a href="#/crawl/{crawl.slug}" class="btn">View Details</a>
           </footer>
         </article>
@@ -228,9 +238,20 @@
     border-top: 1px solid #f3f4f6;
   }
 
+  .footer-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
   .crawl-card time {
     font-size: 0.8125rem;
     color: #9ca3af;
+  }
+
+  .cost {
+    font-size: 0.75rem;
+    color: #6b7280;
   }
 
   .btn {

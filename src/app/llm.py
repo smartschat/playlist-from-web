@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 
 from openai import OpenAI
 
-from .models import ExtractedLink, ParsedPage, Track, TrackBlock
+from .models import ExtractedLink, LLMUsage, ParsedPage, Track, TrackBlock
 
 SYSTEM_PROMPT = """You are a meticulous parser that extracts music track listings from webpages.
 - Identify coherent blocks of track listings (e.g., playlists, program segments).
@@ -46,6 +46,10 @@ def parse_with_llm(url: str, content: str, model: str, api_key: str) -> ParsedPa
         messages=messages,
         response_format={"type": "json_object"},
     )
+
+    # Capture token usage
+    llm_usage = LLMUsage.from_completion(completion.usage, model)
+
     raw = completion.choices[0].message.content
     if raw is None:
         raise ValueError("LLM returned empty content")
@@ -92,6 +96,7 @@ def parse_with_llm(url: str, content: str, model: str, api_key: str) -> ParsedPa
         source_name=source_name or None,
         fetched_at=datetime.now(timezone.utc),
         blocks=blocks,
+        llm_usage=llm_usage,
     )
 
 
@@ -116,7 +121,9 @@ Links:
 \"\"\""""
 
 
-def extract_links_with_llm(url: str, content: str, model: str, api_key: str) -> List[ExtractedLink]:
+def extract_links_with_llm(
+    url: str, content: str, model: str, api_key: str
+) -> Tuple[List[ExtractedLink], LLMUsage]:
     """
     Use OpenAI to extract playlist-related links from an index page.
 
@@ -127,7 +134,7 @@ def extract_links_with_llm(url: str, content: str, model: str, api_key: str) -> 
         api_key: OpenAI API key.
 
     Returns:
-        List of ExtractedLink objects with absolute URLs.
+        Tuple of (list of ExtractedLink objects with absolute URLs, LLMUsage).
     """
     from urllib.parse import urljoin
 
@@ -147,6 +154,9 @@ def extract_links_with_llm(url: str, content: str, model: str, api_key: str) -> 
         messages=messages,
         response_format={"type": "json_object"},
     )
+
+    # Capture token usage
+    llm_usage = LLMUsage.from_completion(completion.usage, model)
 
     raw = completion.choices[0].message.content
     if raw is None:
@@ -174,4 +184,4 @@ def extract_links_with_llm(url: str, content: str, model: str, api_key: str) -> 
             )
         )
 
-    return links
+    return links, llm_usage

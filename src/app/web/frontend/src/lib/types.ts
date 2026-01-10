@@ -20,6 +20,7 @@ export interface ParsedPlaylist {
   source_name: string | null;
   fetched_at: string;
   blocks: TrackBlock[];
+  llm_usage?: LLMUsage;
 }
 
 export interface PlaylistSummary {
@@ -32,6 +33,7 @@ export interface PlaylistSummary {
   has_spotify: boolean;
   miss_count: number | null;
   playlist_count: number | null;
+  llm_cost_usd: number | null;
 }
 
 export interface SpotifyPlaylist {
@@ -61,6 +63,7 @@ export interface CrawlSummary {
   success_count: number;
   skipped_count: number;
   failed_count: number;
+  llm_cost_usd: number | null;
 }
 
 export interface SpotifySearchResult {
@@ -85,6 +88,7 @@ export interface ImportPreviewResponse {
   block_count: number;
   track_count: number;
   blocks: TrackBlock[];
+  llm_cost_usd: number | null;
 }
 
 export interface ImportExecuteResponse {
@@ -93,6 +97,7 @@ export interface ImportExecuteResponse {
   playlist_count: number;
   miss_count: number;
   has_master: boolean;
+  llm_cost_usd: number | null;
 }
 
 // Crawl types
@@ -103,6 +108,14 @@ export interface CrawlProcessedEntry {
   mode?: string;
   artifact?: string;
   error?: string;
+  llm_cost_usd?: number;
+}
+
+export interface LLMUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  model: string;
+  cost_usd: number;
 }
 
 export interface CrawlDetail {
@@ -110,4 +123,5 @@ export interface CrawlDetail {
   discovered_links: { url: string; description: string }[];
   processed: CrawlProcessedEntry[];
   crawled_at: string;
+  llm_usage?: LLMUsage;
 }

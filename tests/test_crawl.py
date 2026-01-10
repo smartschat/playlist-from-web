@@ -6,7 +6,12 @@ import pytest
 
 from app import pipeline
 from app.config import Settings
-from app.models import ExtractedLink, Track, TrackBlock
+from app.models import ExtractedLink, LLMUsage, Track, TrackBlock
+
+
+def _mock_llm_usage() -> LLMUsage:
+    """Create a mock LLMUsage for tests."""
+    return LLMUsage(prompt_tokens=100, completion_tokens=50, model="gpt-5-nano", cost_usd=0.0001)
 
 
 @pytest.fixture
@@ -59,22 +64,24 @@ def test_extract_links_from_index(monkeypatch, tmp_path: Path, settings: Setting
 
     # Mock LLM extraction
     def fake_extract_links(url, content, model, api_key):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/playlist/2024-01-01.pdf", description="January"),
             ExtractedLink(
                 url="https://example.com/playlist/2024-02-01.pdf", description="February"
             ),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "extract_links_with_llm", fake_extract_links)
 
-    links = pipeline._extract_links_from_index(
+    links, llm_usage = pipeline._extract_links_from_index(
         "https://example.com/index", force=True, settings=settings
     )
 
     assert len(links) == 2
     assert links[0].url == "https://example.com/playlist/2024-01-01.pdf"
     assert links[1].url == "https://example.com/playlist/2024-02-01.pdf"
+    assert llm_usage is not None
 
 
 def test_run_crawl_dev_mode(monkeypatch, tmp_path: Path, settings: Settings) -> None:
@@ -86,10 +93,11 @@ def test_run_crawl_dev_mode(monkeypatch, tmp_path: Path, settings: Settings) -> 
 
     # Mock link extraction
     def fake_extract(url, force, settings):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/page1", description="Page 1"),
             ExtractedLink(url="https://example.com/page2", description="Page 2"),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
 
@@ -123,11 +131,12 @@ def test_run_crawl_max_links(monkeypatch, tmp_path: Path, settings: Settings) ->
     (tmp_path / "data" / "crawl").mkdir(parents=True)
 
     def fake_extract(url, force, settings):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/page1", description="Page 1"),
             ExtractedLink(url="https://example.com/page2", description="Page 2"),
             ExtractedLink(url="https://example.com/page3", description="Page 3"),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
 
@@ -158,10 +167,11 @@ def test_run_crawl_continues_on_error(monkeypatch, tmp_path: Path, settings: Set
     (tmp_path / "data" / "crawl").mkdir(parents=True)
 
     def fake_extract(url, force, settings):
-        return [
+        links = [
             ExtractedLink(url="https://example.com/fail", description="Will fail"),
             ExtractedLink(url="https://example.com/success", description="Will succeed"),
         ]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
 
@@ -196,7 +206,8 @@ def test_crawl_result_saved(monkeypatch, tmp_path: Path, settings: Settings) -> 
     crawl_dir.mkdir(parents=True)
 
     def fake_extract(url, force, settings):
-        return [ExtractedLink(url="https://example.com/page1", description="Page 1")]
+        links = [ExtractedLink(url="https://example.com/page1", description="Page 1")]
+        return links, _mock_llm_usage()
 
     monkeypatch.setattr(pipeline, "_extract_links_from_index", fake_extract)
     monkeypatch.setattr(pipeline, "run_dev", lambda *args, **kwargs: True)

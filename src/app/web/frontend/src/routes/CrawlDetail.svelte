@@ -79,6 +79,11 @@
   $: successCount = crawl?.processed.filter(p => p.status === 'success').length ?? 0;
   $: skippedCount = crawl?.processed.filter(p => p.status === 'skipped').length ?? 0;
   $: failedCount = crawl?.processed.filter(p => p.status === 'failed').length ?? 0;
+
+  function formatCost(cost: number | null | undefined): string {
+    if (cost === null || cost === undefined) return '-';
+    return `$${cost.toFixed(4)}`;
+  }
 </script>
 
 <div class="crawl-detail-page">
@@ -121,6 +126,12 @@
           <span class="value {failedCount > 0 ? 'warn' : ''}">{failedCount}</span>
           <span class="label">failed</span>
         </div>
+        {#if crawl.llm_usage}
+          <div class="stat">
+            <span class="value cost">{formatCost(crawl.llm_usage.cost_usd)}</span>
+            <span class="label">LLM cost</span>
+          </div>
+        {/if}
       </div>
       <p class="crawl-time">Crawled: {formatDate(crawl.crawled_at)}</p>
     </div>
@@ -138,6 +149,9 @@
               {/if}
               {#if entry.error}
                 <span class="error-text">{entry.error}</span>
+              {/if}
+              {#if entry.llm_cost_usd}
+                <span class="entry-cost">LLM: {formatCost(entry.llm_cost_usd)}</span>
               {/if}
             </div>
           </div>
@@ -275,6 +289,10 @@
     color: #d97706;
   }
 
+  .stat .value.cost {
+    color: #1a1a2e;
+  }
+
   .stat .label {
     font-size: 0.6875rem;
     color: #9ca3af;
@@ -389,6 +407,11 @@
   .error-text {
     font-size: 0.8125rem;
     color: #dc2626;
+  }
+
+  .entry-cost {
+    font-size: 0.75rem;
+    color: #6b7280;
   }
 
   .item-actions {
