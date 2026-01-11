@@ -45,6 +45,7 @@ def parse_with_llm(url: str, content: str, model: str, api_key: str) -> ParsedPa
         model=model,
         messages=messages,
         response_format={"type": "json_object"},
+        reasoning_effort="low",
     )
 
     # Capture token usage
@@ -153,6 +154,7 @@ def extract_links_with_llm(
         model=model,
         messages=messages,
         response_format={"type": "json_object"},
+        reasoning_effort="low",
     )
 
     # Capture token usage
